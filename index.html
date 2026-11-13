@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101927">
+  <title>Покер камера — тест за iPhone</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: #101927; color: #f4f7fb; }
+    .main { max-width: 720px; margin: auto; padding: max(18px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+    h1 { margin: 0 0 8px; font-size: clamp(22px, 6vw, 32px); }
+    p { line-height: 1.5; color: #bcc8d8; }
+    .preview { position: relative; background: #03080e; border: 1px solid #35475d; border-radius: 16px; overflow: hidden; aspect-ratio: 4 / 3; }
+    video { display: block; width: 100%; height: 100%; object-fit: contain; background: #03080e; }
+    .placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; color: #a8bacb; pointer-events: none; }
+    .preview.active .placeholder { display: none; }
+    .buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 16px 0; }
+    button { min-height: 49px; border-radius: 12px; padding: 12px; border: 0; font-size: 16px; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .45; cursor: default; }
+    .start { background: #5addb0; color: #052518; }
+    .stop { background: #de7181; color: #23080e; }
+    .secondary { background: #28384e; color: #f4f7fb; }
+    .info { padding: 14px; background: #1b2a3d; border: 1px solid #34465e; border-radius: 12px; }
+    .info p { margin: 7px 0; }
+    #status { font-weight: 600; color: #e5eefa; }
+    #status[data-kind="error"] { color: #ff9baa; }
+    #status[data-kind="ok"] { color: #7ef4c8; }
+    .foot { font-size: 13px; margin-top: 17px; }
+  </style>
+</head>
+<body>
+  <main class="main">
+    <h1>Тест на камерата</h1>
+    <p>Първи прототип за iPhone 7 Plus. Използва само камерата — без микрофон, запис, разпознаване на карти или връзка с покер клиент.</p>
+    <div class="preview" id="preview">
+      <video id="camera" autoplay muted playsinline webkit-playsinline></video>
+      <div class="placeholder">Натисни „Включи камерата“, за да видиш картината тук.</div>
+    </div>
+    <div class="buttons">
+      <button id="start" class="start">Включи камерата</button>
+      <button id="stop" class="stop" disabled>Спри камерата</button>
+      <button id="flip" class="secondary" disabled>Смени камерата</button>
+      <button id="measure" class="secondary" disabled>Провери картината</button>
+    </div>
+    <div class="info" aria-live="polite">
+      <p id="status">Състояние: не е стартирана.</p>
+      <p id="details">Разрешението за камера ще бъде поискано след натискане на бутона.</p>
+    </div>
+    <p class="foot">Постави телефона стабилно срещу монитор с демонстрационна покер маса. Страницата не изпраща кадри никъде. За достъп до камерата я отвори през HTTPS в Safari, а не като преглед на файл в друго приложение.</p>
+  </main>
+  <script>
+    (function () {
+      'use strict';
+      var video = document.getElementById('camera');
+      var preview = document.getElementById('preview');
+      var startButton = document.getElementById('start');
+      var stopButton = document.getElementById('stop');
+      var flipButton = document.getElementById('flip');
+      var measureButton = document.getElementById('measure');
+      var status = document.getElementById('status');
+      var details = document.getElementById('details');
+      var stream = null;
+      var facing = 'environment';
+      var busy = false;
+
+      function setStatus(message, kind) {
+        status.textContent = 'Състояние: ' + message;
+        status.setAttribute('data-kind', kind || '');
+      }
+      function refreshButtons() {
+        startButton.disabled = busy || !!stream;
+        stopButton.disabled = busy || !stream;
+        flipButton.disabled = busy || !stream;
+        measureButton.disabled = busy || !stream;
+      }
+      function stopCamera() {
+        if (stream) {
+          stream.getTracks().forEach(function (track) { track.stop(); });
+        }
+        stream = null;
+        video.pause();
+        video.srcObject = null;
+        preview.classList.remove('active');
+        setStatus('камерата е спряна', '');
+        details.textContent = 'Не се съхраняват снимки или видео.';
+        refreshButtons();
+      }
+      function describeError(e) {
+        var n = (e && e.name) || '';
+        if (n === 'NotAllowedError' || n === 'PermissionDeniedError') return 'Достъпът е отказан. В Safari разреши камерата за този сайт и опитай отново.';
+        if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return 'Safari не намира работеща камера.';
+        if (n === 'NotReadableError' || n === 'TrackStartError') return 'Камерата е заета или не може да бъде стартирана. Затвори други приложения, които я използват.';
+        if (n === 'OverconstrainedError') return 'Избраната камера не поддържа тези настройки.';
+        if (n === 'SecurityError') return 'Браузърът блокира камерата по съображения за сигурност.';
+        return 'Камерата не се стартира (' + (n || 'неизвестна грешка') + ').';
+      }
+      async function startCamera() {
+        if (busy) return;
+        if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setStatus('камерата не е достъпна', 'error');
+          details.textContent = 'Отвори публикуваната страница през HTTPS директно в Safari.';
+          return;
+        }
+        busy = true;
+        refreshButtons();
+        setStatus('изчаква разрешение от Safari', '');
+        try {
+          // No microphone access is requested.
+          var requested = { audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } };
+          stream = await navigator.mediaDevices.getUserMedia(requested);
+          video.srcObject = stream;
+          try { await video.play(); } catch (_) { /* Some Safari versions play on metadata. */ }
+          preview.classList.add('active');
+          setStatus('камерата работи', 'ok');
+          details.textContent = 'Камера: ' + (facing === 'environment' ? 'задна' : 'предна') + '. Натисни „Провери картината“ за резолюцията.';
+        } catch (error) {
+          if (stream) stream.getTracks().forEach(function (track) { track.stop(); });
+          stream = null;
+          video.srcObject = null;
+          preview.classList.remove('active');
+          setStatus('грешка', 'error');
+          details.textContent = describeError(error);
+        } finally {
+          busy = false;
+          refreshButtons();
+        }
+      }
+      startButton.addEventListener('click', startCamera);
+      stopButton.addEventListener('click', stopCamera);
+      flipButton.addEventListener('click', function () {
+        if (!stream) return;
+        stopCamera();
+        facing = facing === 'environment' ? 'user' : 'environment';
+        startCamera();
+      });
+      measureButton.addEventListener('click', function () {
+        if (!stream) return;
+        var w = video.videoWidth, h = video.videoHeight;
+        if (w && h) {
+          details.textContent = 'Картината е ' + w + ' × ' + h + ' пиксела. Камера: ' + (facing === 'environment' ? 'задна' : 'предна') + '. Няма запис или изпращане на видео.';
+        } else {
+          details.textContent = 'Камерата е включена, но Safari още не е предоставил размерите на кадъра.';
+        }
+      });
+      window.addEventListener('pagehide', function () { if (stream) stopCamera(); });
+      refreshButtons();
+    })();
+  </script>
+</body>
+</html>
