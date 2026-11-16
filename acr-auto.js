@@ -98,7 +98,7 @@
  function canvasImage(element,fullResolution){
   var w=element.videoWidth||element.naturalWidth,h=element.videoHeight||element.naturalHeight;
   if(!w||!h)throw new Error('Няма изображение');
-  var factor=Math.min(1,fullResolution?1:1100/w,Math.sqrt(980000/(w*h)));
+  var factor=Math.min(1,fullResolution?1:1100/w,Math.sqrt(2000000/(w*h)));
   contextCanvas.width=Math.max(1,Math.round(w*factor));
   contextCanvas.height=Math.max(1,Math.round(h*factor));
   ctx.drawImage(element,0,0,contextCanvas.width,contextCanvas.height);
