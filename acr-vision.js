@@ -30,6 +30,9 @@ var REAL_ACR_MASKS={"rank":{"4":["000000 000000 000780 000f80 001f80 003f80 003f
 // Verified ACR corner-rank masks from user-supplied screenshots. These
 // normalized 24x24 binary glyphs contain no player or account information.
 var VERIFIED_ACR_RANK_MASKS={"3":["000000000000001800007f0000ff8001ffc003e7c003c3c003c3c00003c0000fc0001f80001f80001fc0000fc00003c007c3c007c3c003e7c003ffc001ff8000ff00000000000000"],"Q":["000000000000007e0000ff0001ffc003efc00381e00780e00780e00f00e00f00e00f00e00700e00787e00387e003e7e001ffe000ffe0000000000000000000000000000000000000","00000000000000fe0001ff8007ffc007e7e00f81f01f01f01f00f01e00701e00701e00701e00701e00701e00f01f02f01f07f00f83f00fc3e007fff003fff000ff70000000000000","000000000000007f0001ffc003ffe007e3f00781f00f80f80f00781f00781f00781f00381f00781f00781f00781f02780f87f80f83f807e3f003fff801fff8007fb8000000000000"],"K":["0000000000000701f00f83f00f83f00f87e00f9f800f9f800fff000ffe000ffc000ffc000ffe000fff000fff000fdf800f8fc00f87c00f87e00f83f00f83f00f80f0000000000000"]};
+// Suit glyphs extracted from verified ACR screenshots. Rank glyphs and
+// suit glyphs are scored independently, with colour consistency validation.
+var VERIFIED_ACR_SUIT_MASKS={"d":["00000000000000ff8001ffc003ffe003fff007fff80ffffc1ffffc3ffffc3ffffc1ffffc0ffff807fff003ffe000ffc000ff80007f00007f00003e00001e00000000000000000000"],"h":["0000000000000000003ffffc3ffffc3ffffc3ffffc3ffffc3ffffc1ffff80ffff807fff007fff003ffe001ffc000ff8000ff80007f00003e00001c00000000000000000000000000"],"c":["00000000000001ff0001ff8001ff8001ff8001ff8001ffc007fff00ffff81ffffc3ffffc3ffffc3ffffc3ffffc1ffffc0ffff0000800001800001c00003c00003e00000000000000"],"s":["000000000000003c00007e0000ff0001ff8003ffc007fff01ffff83ffff83ffff83ffff83ffff81ffff81ffff80fcdf8000c00001c00001c00001c00003e00003e00000000000000"]};
 function templates(){
  if(CACHE)return CACHE;CACHE={rank:[],suit:[]};
  for(var kind in REF)for(var key in REF[kind])CACHE[kind].push({key:key,mask:matrixFromHex(REF[kind][key]),provenance:'acr'});
@@ -43,6 +46,15 @@ function templates(){
      var rows=samples[sampleIndex].match(/.{6}/g);
      if(rows&&rows.length===24)CACHE.rank.push({key:verifiedRank,
        mask:matrixFromHex(rows),provenance:'acr'});
+   }
+ }
+ for(var verifiedSuit in VERIFIED_ACR_SUIT_MASKS){
+   var suitSamples=VERIFIED_ACR_SUIT_MASKS[verifiedSuit];
+   for(var suitIndex=0;suitIndex<suitSamples.length;suitIndex++){
+     var suitRows=suitSamples[suitIndex].match(/.{6}/g);
+     if(suitRows&&suitRows.length===24)CACHE.suit.push({
+       key:verifiedSuit,mask:matrixFromHex(suitRows),provenance:'acr'
+     });
    }
  }
  var fonts=['Arial','Helvetica','sans-serif'],names=RANK_VALUES;
