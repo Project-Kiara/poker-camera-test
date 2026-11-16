@@ -174,7 +174,7 @@ function templateCoverage(){
 }
 
 function selectGlyph(img,box,part){
- var kind=part==='rank'?'rank':'suit',chosen=null,shadedVotes={};
+ var kind=part==='rank'?'rank':'suit',chosen=null,shadedVotes={},shadedCandidates={};
  for(var v=0;v<3;v++){
   var pixels=glyphMask(img,box,part,v);
   if(!pixels||!pixels.mask||pixels.count<10)continue;
@@ -186,7 +186,11 @@ function selectGlyph(img,box,part){
   var candidate={key:matched.first.key,score:matched.first.score,
     margin:gap,accepted:accepted,isRed:pixels.isRed,variant:v,
     source:matched.first.provenance||'unknown'};
-  if(accepted)shadedVotes[candidate.key]=(shadedVotes[candidate.key]||0)+1;
+  if(accepted){
+   shadedVotes[candidate.key]=(shadedVotes[candidate.key]||0)+1;
+   if(!shadedCandidates[candidate.key]||candidate.score>shadedCandidates[candidate.key].score)
+    shadedCandidates[candidate.key]=candidate;
+  }
   // Normal cards keep the fast path. Shaded cards need crop agreement,
   // because a winner banner may mimic one of the rank glyphs.
   if(v===0&&accepted&&!box.shaded)return candidate;
@@ -195,8 +199,16 @@ function selectGlyph(img,box,part){
       candidate.score+Math.min(.15,candidate.margin)*.2>
       chosen.score+Math.min(.15,chosen.margin)*.2))chosen=candidate;
  }
- if(box.shaded&&chosen&&chosen.accepted&&shadedVotes[chosen.key]<2){
-  chosen.accepted=false;
+ if(box.shaded){
+  var consensus=null;
+  for(var k in shadedVotes)if(shadedVotes[k]>=2){
+   var contender=shadedCandidates[k];
+   if(!consensus||shadedVotes[k]>shadedVotes[consensus.key]||
+      shadedVotes[k]===shadedVotes[consensus.key]&&contender.score>consensus.score)
+    consensus=contender;
+  }
+  if(consensus)chosen=consensus;
+  else if(chosen)chosen.accepted=false;
  }
  if(!chosen||!chosen.accepted){
   var alternate=fallbackGlyph(img,box,part);
