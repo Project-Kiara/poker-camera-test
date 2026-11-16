@@ -6,48 +6,65 @@
  if(!vision||!analysis||!window.PokerMath||!window.PokerCardDetector||!video)return;
  var section=document.createElement('section');
  section.className='panel';section.id='autoRecognition';
- section.innerHTML=
- '<h2>Автоматично разпознаване · ACR Poker</h2>'+
- '<p class="hint" id="ocrVersion">OCR диагностика · 16.11.2026 · r5</p>'+
- '<p class="hint">Пробен режим: разчитане на видимите карти от камерата или от снимка. Неразпознатите карти не се отгатват.</p>'+
- '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>'+
- '<p class="hint"><a href="./ocr-selftest.html">Тест на всички 52 синтетични карти</a></p>'+
- '<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">'+
- '<label style="margin:0"><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>'+
- '<label style="margin:0"><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label></div>'+
- '<label for="recognitionFile">Тест със снимка от ACR Poker</label>'+
- '<input id="recognitionFile" type="file" accept="image/*" style="width:100%">'+
- '<canvas id="visionDebug" hidden aria-label="Преглед на откритите зони в снимката" style="width:100%;height:auto;margin-top:10px;border-radius:9px"></canvas>'+
- '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Камерата не е стартирана. Можеш да избереш снимка.</p>'+
- '<p class="hint" id="visionStage" style="margin:6px 0">Етап: —</p>'+
- '<p id="visionCards" style="font-size:16px;font-weight:700;color:#e1f8ee;word-break:break-word;margin:7px 0">Общи карти: —</p>'+
- '<p id="visionHero" style="font-size:16px;font-weight:700;color:#a8dcff;word-break:break-word;margin:7px 0">Моите карти: —</p>'+
- '<p class="hint" id="visionOthers" style="margin:6px 0">Други открити карти: —</p>'+
- '<p class="hint" id="visionSeats">Активни ръце: —</p>'+
- '<details id="ocrReport" style="margin:10px 0"><summary style="cursor:pointer;font-weight:700">Подробна диагностика на всяка открита карта</summary>'+
- '<div id="ocrCardReports" style="white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 monospace;padding:9px;background:#0d1b2b;border-radius:8px;margin-top:7px">Качи снимка, за да видиш отчета.</div></details>'+
- '<p class="fineprint">Снимките и видеокадрите не се изпращат. Оценката за броя активни играчи е по видимите покрити ръце, а не по всички места на масата. При скрити лични карти няма достатъчно информация за личен шанс.</p>';
+ section.innerHTML=[
+  '<h2>Автоматично разпознаване · ACR Poker</h2>',
+  '<div class="reading-summary">',
+  '<p id="visionStage">Етап: —</p>',
+  '<p id="visionCards" style="color:#e1f8ee">Общи карти: —</p>',
+  '<p id="visionHero" style="color:#a8dcff">Моите карти: —</p>',
+  '<p id="visionSeats">Активни ръце: —</p>',
+  '</div>',
+  '<div id="probabilityMount"></div>',
+  '<div class="capture-actions">',
+  '<button type="button" class="start" id="captureFrame" disabled>📷 Снимай</button>',
+  '<button type="button" class="secondary" id="uploadPhoto">Качи снимка</button>',
+  '</div>',
+  '<input id="recognitionFile" type="file" accept="image/*" hidden aria-label="Качи снимка от ACR Poker">',
+  '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
+  '<details class="extra-settings">',
+  '<summary>Допълнителни данни и OCR диагностика</summary>',
+  '<p class="hint" id="ocrVersion">Интерфейс r6 · OCR r5 · 16.11.2026</p>',
+  '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
+  '<p class="hint"><a href="./ocr-selftest.html">Тест на 52 синтетични карти</a></p>',
+  '<div class="config-row">',
+  '<label><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>',
+  '<label><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label>',
+  '</div>',
+  '<p class="hint" id="visionOthers">Други открити карти: —</p>',
+  '<div id="technicalMount"></div>',
+  '<canvas id="visionDebug" hidden aria-label="Открити карти в снимката" style="width:100%;height:auto;margin-top:8px;border-radius:9px"></canvas>',
+  '<details id="ocrReport"><summary>Подробна диагностика на всяка карта</summary>',
+  '<div id="ocrCardReports" style="white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.4 monospace;padding:8px;background:#0d1b2b;border-radius:8px;margin-top:7px">Качи снимка, за да видиш отчета.</div>',
+  '</details>',
+  '<p class="fineprint">Оценката за активни играчи е по видимите ръце. Без лични карти няма надежден личен шанс. Снимките остават в браузъра.</p>',
+  '</details>'
+ ].join('');
  analysis.parentNode.insertBefore(section,analysis);
  var coverage=vision.templateCoverage&&vision.templateCoverage();
  var coverageLabel=document.getElementById('ocrCoverage');
  if(coverageLabel&&coverage){
   coverageLabel.textContent='OCR образци: '+coverage.ranks+'/13 стойности × '+coverage.suits+'/4 бои = '+coverage.combinations+'/52 комбинации. ACR калибрирани: '+coverage.calibratedRanks+'/13 стойности, '+coverage.calibratedSuits+'/4 бои. Останалите са резервни шрифтови образци.';
  }
- // Keep the calculated probabilities directly below the camera/recognition area.
+ // The calculator inputs stay mounted for the existing engine but the user
+ // sees one combined auto-recognition + probability panel.
  var summaryGrid=analysis.querySelector('.result-grid');
  var summaryDetails=document.getElementById('analysisDetails');
  var summaryMessage=document.getElementById('analysisMessage');
- var seats=document.getElementById('visionSeats');
- if(summaryGrid&&summaryDetails&&summaryMessage&&seats){
-   seats.insertAdjacentElement('afterend',summaryMessage);
-   summaryMessage.insertAdjacentElement('afterend',summaryGrid);
-   summaryGrid.insertAdjacentElement('afterend',summaryDetails);
- }
- var css=document.createElement('style');
- css.textContent='#autoRecognition input[type="file"]{background:#203247;color:#f4f7fb;border:1px solid #52647b;padding:9px;border-radius:10px;font-size:14px}'+
- '.preview{aspect-ratio:auto;height:clamp(140px,32vh,240px)}#autoRecognition{margin-top:10px}';
- document.head.appendChild(css);
+ var summaryActions=analysis.querySelector('.actions');
+ var summaryNotes=analysis.querySelector('.fineprint');
+ var probabilityMount=document.getElementById('probabilityMount');
+ var technicalMount=document.getElementById('technicalMount');
+ [summaryGrid,summaryActions,summaryMessage].forEach(function(el){
+  if(el&&probabilityMount)probabilityMount.appendChild(el);
+ });
+ [summaryDetails,summaryNotes].forEach(function(el){
+  if(el&&technicalMount)technicalMount.appendChild(el);
+ });
+ analysis.hidden=true;
  var file=document.getElementById('recognitionFile'),status=document.getElementById('visionStatus');
+ var captureButton=document.getElementById('captureFrame');
+ var uploadButton=document.getElementById('uploadPhoto');
+ uploadButton.addEventListener('click',function(){file.click();});
  var cardLine=document.getElementById('visionCards'),seatLine=document.getElementById('visionSeats');
  var heroLine=document.getElementById('visionHero'),othersLine=document.getElementById('visionOthers'),stageLine=document.getElementById('visionStage');
  var debugCanvas=document.getElementById('visionDebug');
@@ -200,6 +217,26 @@
   ctx.drawImage(element,0,0,contextCanvas.width,contextCanvas.height);
   return ctx.getImageData(0,0,contextCanvas.width,contextCanvas.height);
  }
+ // Freeze the CURRENT already-authorized video frame, without reopening camera.
+ captureButton.addEventListener('click',function(){
+  if(video.readyState<2||!video.videoWidth||!video.videoHeight||video.paused){
+   status.textContent='Първо включи камерата и изчакай картината.';
+   return;
+  }
+  try{
+   var frame=canvasImage(video,true);
+   var result=inspect(frame,true,{
+    originalWidth:video.videoWidth,originalHeight:video.videoHeight,
+    ocrWidth:frame.width,ocrHeight:frame.height,canonical:false
+   });
+   drawDebug(video,frame,result);
+   lastSignature='';repeats=0;lastApplied='';
+   status.textContent='Заснет и анализиран кадър: '+result.faceCount+' открити карти; '+result.visible.filter(function(c){return !!c.code;}).length+' разчетени.';
+  }catch(err){
+   status.textContent='Кадърът не можа да се обработи: '+err.message;
+  }
+ });
+
  file.addEventListener('change',function(){
   if(!file.files||!file.files[0])return;
   var source=URL.createObjectURL(file.files[0]),img=new Image();
@@ -224,6 +261,7 @@
   img.src=source;
  });
  function tick(){
+  captureButton.disabled=!(video.readyState>=2&&video.videoWidth&&!video.paused);
   if(frameWorking){setTimeout(tick,650);return;}
   if(video.readyState>=2&&video.videoWidth&&!video.paused){
    frameWorking=true;
