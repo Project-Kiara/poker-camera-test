@@ -79,6 +79,7 @@
     ' | разлика '+(c.rankMargin==null?'—':c.rankMargin+' пункта'));
    lines.push('  Боя: '+readSuit(c)+' | сходство '+scoreSuit+
     ' | разлика '+(c.suitMargin==null?'—':c.suitMargin+' пункта'));
+   lines.push('  Източник на образците: стойност '+(c.rankSource||'неизвестен')+', боя '+(c.suitSource||'неизвестен'));
    lines.push('  Крайно: '+(c.code?shown(c.code):'НЕПОТВЪРДЕНА')+
     (c.code?'':' | най-близък образец '+(c.guess?shown(c.guess):'няма'))+
     ' | '+(c.reason||'потвърдено'));
