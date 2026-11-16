@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101927">
-  <title>Покер камера — тест за iPhone</title>
+  <title>Покер анализатор — камера и вероятности</title>
   <style>
     :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     * { box-sizing: border-box; }
@@ -58,8 +58,8 @@
 </head>
 <body>
   <main class="main">
-    <h1>Тест на камерата</h1>
-    <p>Първи прототип за iPhone 7 Plus. Използва само камерата — без микрофон, запис, разпознаване на карти или връзка с покер клиент.</p>
+    <h1>Покер анализатор</h1>
+    <p>Експериментална версия за iPhone. Камера, разчитане на видимите карти в ACR Poker и локални вероятности — без микрофон, запис на видео или връзка с покер клиент.</p>
     <div class="preview" id="preview">
       <video id="camera" autoplay muted playsinline webkit-playsinline></video>
       <div class="placeholder">Натисни „Включи камерата“, за да видиш картината тук.</div>
@@ -73,7 +73,7 @@
 
     <section class="panel" id="analysisPanel">
       <h2>Покер анализ</h2>
-      <p class="hint"><strong>Експериментален режим:</strong> картите се въвеждат ръчно. Автоматичното разпознаване от камерата предстои.</p>
+      <p class="hint"><strong>Експериментален режим:</strong> разпознатите от ACR Poker карти се попълват автоматично. Ръчното въвеждане остава като резервен вариант при нечетливи или скрити карти.</p>
       <label for="hero0">Моите две карти</label>
       <div id="heroCards" class="card-row hero"></div>
       <label for="board0">Общи карти (флоп, търн, ривър)</label>
