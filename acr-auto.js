@@ -52,12 +52,13 @@
  function shown(code){return code?code.slice(0,-1).replace('T','10')+suitSymbols[code.slice(-1)]:'?';}
  function readRank(c){return c.rank?c.rank.replace('T','10'):'непотвърдена';}
  function readSuit(c){return c.suit?(suitSymbols[c.suit]||c.suit):'непотвърдена';}
- function diagnostics(result){
+ function diagnostics(result,sourceInfo){
   var regions={};result.board.forEach(function(c){regions[c.box.x+','+c.box.y]='Борд';});
   result.hero.forEach(function(c){regions[c.box.x+','+c.box.y]='Лични';});
   result.others.forEach(function(c){regions[c.box.x+','+c.box.y]='Други';});
   var cards=result.visible.slice().sort(function(a,b){return a.box.y-b.box.y||a.box.x-b.box.x;});
-  var lines=['Открити правоъгълници: '+cards.length,
+  var lines=[sourceInfo?'Източник: '+sourceInfo.originalWidth+'×'+sourceInfo.originalHeight+' → OCR: '+sourceInfo.ocrWidth+'×'+sourceInfo.ocrHeight+(sourceInfo.canonical?' (каноничен мащаб ACR)':' (общ мащаб)'):'Източник: видео кадър',
+    'Открити правоъгълници: '+cards.length,
     'Потвърдени стойност+боя: '+cards.filter(function(c){return !!c.code;}).length,
     'Непотвърдени: '+cards.filter(function(c){return !c.code;}).length];
   cards.forEach(function(c,i){
@@ -132,7 +133,9 @@
     }
     boardCodes=newBoard;
    }
-  } else if(result.stageConfirmed&&board.length===0&&result.others.length===0&&boardCodes.length){
+  } else if(boardCodes.length){
+   // Invalidate stale auto-recognized community cards as soon as the new screenshot is incomplete.
+   // Never leave a previous board in the calculator while displaying '?' in the recognition panel.
    for(var q=0;q<5;q++)changed=changeField('board'+q,'')||changed;
    boardCodes=[];
   }
@@ -161,11 +164,11 @@
     if(run&&!run.disabled)run.click();
   }
  }
- function inspect(img,confirmed){
+ function inspect(img,confirmed,sourceInfo){
   var start=Date.now();
   var result=vision.analyze(img);
   emitText(result,confirmed);
-  diagnostics(result);
+  diagnostics(result,sourceInfo);
   seatLine.textContent+=' · обработка '+(Date.now()-start)+' ms';
   if(confirmed)applyResult(result);
   return result;
@@ -173,9 +176,18 @@
  function canvasImage(element,fullResolution){
   var w=element.videoWidth||element.naturalWidth,h=element.videoHeight||element.naturalHeight;
   if(!w||!h)throw new Error('Няма изображение');
-  var factor=Math.min(1,fullResolution?1:1280/w,Math.sqrt(2000000/(w*h)));
+  // The calibrated ACR glyph masks were made at approximately 709px screenshot width.
+  // A 1179px iPhone screenshot used to be reduced only to the 2MP cap (~961px).
+  // This changes a small "5" glyph enough to make its rank margin fail.
+  // Normalize ACR portrait screenshots to the template's reference scale BEFORE OCR.
+  var isAcrPortrait=!!fullResolution&&w>=709&&h/w>=1.9&&h/w<=2.45;
+  var factor=isAcrPortrait?709/w:
+    Math.min(1,fullResolution?1:1280/w,Math.sqrt(2000000/(w*h)));
   contextCanvas.width=Math.max(1,Math.round(w*factor));
   contextCanvas.height=Math.max(1,Math.round(h*factor));
+  ctx.imageSmoothingEnabled=true;
+  if('imageSmoothingQuality' in ctx)ctx.imageSmoothingQuality='high';
+  ctx.clearRect(0,0,contextCanvas.width,contextCanvas.height);
   ctx.drawImage(element,0,0,contextCanvas.width,contextCanvas.height);
   return ctx.getImageData(0,0,contextCanvas.width,contextCanvas.height);
  }
@@ -186,15 +198,20 @@
   img.onload=function(){
    try{
     // Keep original resolution when possible for reading small glyphs.
-    var frame=canvasImage(img,true),result=inspect(frame,true);
+    var frame=canvasImage(img,true),result=inspect(frame,true,{
+     originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,
+     ocrWidth:frame.width,ocrHeight:frame.height,
+     canonical:img.naturalWidth>=709&&img.naturalHeight/img.naturalWidth>=1.9&&img.naturalHeight/img.naturalWidth<=2.45
+    });
     drawDebug(img,frame,result);
     lastSignature='';repeats=0;lastApplied='';
     if(result.faceCount&&result.visible.every(function(c){return !!c.code;}))
        status.textContent='Снимката е обработена: '+result.faceCount+' четливи открити карти. '+(getField('hero0')!==''?'':'Личните карти не се виждат.');
    }catch(err){status.textContent='Неуспешно разчитане: '+err.message;}
    URL.revokeObjectURL(source);
+   file.value=''; // Enable retesting the same image without a full page reload.
   };
-  img.onerror=function(){status.textContent='Снимката не може да се отвори.';URL.revokeObjectURL(source);};
+  img.onerror=function(){status.textContent='Снимката не може да се отвори.';URL.revokeObjectURL(source);file.value='';};
   img.src=source;
  });
  function tick(){
