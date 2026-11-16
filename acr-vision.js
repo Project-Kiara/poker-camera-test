@@ -68,6 +68,85 @@ function matchSymbol(mask,kind){
  for(var k in byKey){var e=byKey[k];if(!first||e.score>first.score){second=first;first=e;}else if(!second||e.score>second.score)second=e;}
  return {first:first,second:second};
 }
+
+// Secondary OCR prototypes cover the COMPLETE 13-rank / 4-suit alphabet.
+// The ACR-calibrated glyphs remain the primary recognition path. Generic font
+// prototypes are fallback-only, because they have not been calibrated on
+// verified screenshots of every rank and suit from ACR Poker.
+var FALLBACK_CACHE=null;
+var OCR_RANKS='23456789TJQKA',OCR_SUITS='cdhs';
+function fallbackTemplates(kind){
+ if(FALLBACK_CACHE)return FALLBACK_CACHE[kind];
+ FALLBACK_CACHE={rank:[],suit:[]};
+ var fonts=['Arial','Helvetica','Verdana','Tahoma','Georgia','sans-serif'];
+ for(var k=0;k<OCR_RANKS.length;k++){
+  var rank=OCR_RANKS.charAt(k),texts=rank==='T'?['10','T']:[rank];
+  for(var f=0;f<fonts.length;f++)for(var v=0;v<texts.length;v++){
+   var template=synthGlyph(texts[v],fonts[f],f%2?'900':'700');
+   if(template)FALLBACK_CACHE.rank.push({key:rank,mask:template});
+  }
+ }
+ var symbols='♣♦♥♠';
+ for(k=0;k<OCR_SUITS.length;k++){
+  for(f=0;f<fonts.length;f++){
+   template=synthGlyph(symbols.charAt(k),fonts[f],f%2?'900':'700');
+   if(template)FALLBACK_CACHE.suit.push({key:OCR_SUITS.charAt(k),mask:template});
+  }
+ }
+ return FALLBACK_CACHE[kind];
+}
+function fallbackGlyph(img,box,part){
+ var kind=part==='rank'?'rank':'suit',refs=fallbackTemplates(kind);
+ if(!refs.length)return null;
+ var votes={},total={},margins={},red={},bestVariant={};
+ for(var v=0;v<3;v++){
+  var pixels=glyphMask(img,box,part,v);
+  if(!pixels||!pixels.mask||pixels.count<10)continue;
+  var candidates={};
+  for(var i=0;i<refs.length;i++){
+   var ref=refs[i],score=similarity(pixels.mask,ref.mask);
+   if(!candidates[ref.key]||score>candidates[ref.key])candidates[ref.key]=score;
+  }
+  var first=null,second=null;
+  for(var key in candidates){
+   var entry={key:key,score:candidates[key]};
+   if(!first||entry.score>first.score){second=first;first=entry;}
+   else if(!second||entry.score>second.score)second=entry;
+  }
+  if(!first)continue;
+  var margin=first.score-(second?second.score:0);
+  if(first.score<.64||margin<.035)continue;
+  votes[first.key]=(votes[first.key]||0)+1;
+  total[first.key]=(total[first.key]||0)+first.score;
+  margins[first.key]=(margins[first.key]||0)+margin;
+  red[first.key]=pixels.isRed;
+  bestVariant[first.key]=v;
+ }
+ var selected=null;
+ for(var key in votes){
+  var count=votes[key],avg=total[key]/count,gap=margins[key]/count;
+  // Two agreeing crops are required; a lone font match is not a card.
+  if(count<2||avg<.70||gap<.055)continue;
+  if(!selected||count>selected.count||count===selected.count&&avg>selected.score)
+   selected={key:key,score:avg,margin:gap,accepted:true,
+     isRed:red[key],variant:bestVariant[key],count:count,source:'font-fallback'};
+ }
+ return selected;
+}
+function templateCoverage(){
+ var base=templates(),secondary=fallbackTemplates('rank');
+ var rank={},suit={},calibratedRank={},calibratedSuit={};
+ base.rank.concat(secondary).forEach(function(x){rank[x.key]=true;if(x.provenance==='acr')calibratedRank[x.key]=true;});
+ base.suit.concat(fallbackTemplates('suit')).forEach(function(x){suit[x.key]=true;if(x.provenance==='acr')calibratedSuit[x.key]=true;});
+ var missingRanks=OCR_RANKS.split('').filter(function(x){return !rank[x];});
+ var missingSuits=OCR_SUITS.split('').filter(function(x){return !suit[x];});
+ return {ranks:OCR_RANKS.length-missingRanks.length,suits:OCR_SUITS.length-missingSuits.length,
+  combinations:(OCR_RANKS.length-missingRanks.length)*(OCR_SUITS.length-missingSuits.length),
+  missingRanks:missingRanks,missingSuits:missingSuits,
+  calibratedRanks:Object.keys(calibratedRank).length,calibratedSuits:Object.keys(calibratedSuit).length,
+  warning:'Шрифтовите образци не доказват точност върху реални ACR снимки.'};
+}
+
 function selectGlyph(img,box,part){
  var kind=part==='rank'?'rank':'suit',chosen=null;
  for(var v=0;v<3;v++){
@@ -87,6 +166,10 @@ function selectGlyph(img,box,part){
      (candidate.accepted===chosen.accepted&&
       candidate.score+Math.min(.15,candidate.margin)*.2>
       chosen.score+Math.min(.15,chosen.margin)*.2))chosen=candidate;
+ }
+ if(!chosen||!chosen.accepted){
+  var alternate=fallbackGlyph(img,box,part);
+  if(alternate)return alternate;
  }
  return chosen;
 }
@@ -229,6 +312,6 @@ function analyze(img){
   boardComplete:board.length>=3&&board.every(function(c){return !!c.code;})&&noDuplicates,
   uniqueCards:noDuplicates};
 }
-root.ACRVision={analyze:analyze,classify:classify,glyphMask:glyphMask,matchSymbol:matchSymbol,templates:templates,groupVisible:groupVisible};
+root.ACRVision={analyze:analyze,classify:classify,glyphMask:glyphMask,matchSymbol:matchSymbol,templates:templates,templateCoverage:templateCoverage,groupVisible:groupVisible};
 
 }(typeof window!=='undefined'?window:globalThis));
