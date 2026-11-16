@@ -8,8 +8,10 @@
  section.className='panel';section.id='autoRecognition';
  section.innerHTML=
  '<h2>Автоматично разпознаване · ACR Poker</h2>'+
- '<p class="hint" id="ocrVersion">OCR диагностика · 16.11.2026 · r4</p>'+
+ '<p class="hint" id="ocrVersion">OCR диагностика · 16.11.2026 · r5</p>'+
  '<p class="hint">Пробен режим: разчитане на видимите карти от камерата или от снимка. Неразпознатите карти не се отгатват.</p>'+
+ '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>'+
+ '<p class="hint"><a href="./ocr-selftest.html">Тест на всички 52 синтетични карти</a></p>'+
  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">'+
  '<label style="margin:0"><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>'+
  '<label style="margin:0"><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label></div>'+
@@ -26,6 +28,11 @@
  '<div id="ocrCardReports" style="white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 monospace;padding:9px;background:#0d1b2b;border-radius:8px;margin-top:7px">Качи снимка, за да видиш отчета.</div></details>'+
  '<p class="fineprint">Снимките и видеокадрите не се изпращат. Оценката за броя активни играчи е по видимите покрити ръце, а не по всички места на масата. При скрити лични карти няма достатъчно информация за личен шанс.</p>';
  analysis.parentNode.insertBefore(section,analysis);
+ var coverage=vision.templateCoverage&&vision.templateCoverage();
+ var coverageLabel=document.getElementById('ocrCoverage');
+ if(coverageLabel&&coverage){
+  coverageLabel.textContent='OCR образци: '+coverage.ranks+'/13 стойности × '+coverage.suits+'/4 бои = '+coverage.combinations+'/52 комбинации. ACR калибрирани: '+coverage.calibratedRanks+'/13 стойности, '+coverage.calibratedSuits+'/4 бои. Останалите са резервни шрифтови образци.';
+ }
  // Keep the calculated probabilities directly below the camera/recognition area.
  var summaryGrid=analysis.querySelector('.result-grid');
  var summaryDetails=document.getElementById('analysisDetails');
@@ -57,7 +64,8 @@
   result.hero.forEach(function(c){regions[c.box.x+','+c.box.y]='Лични';});
   result.others.forEach(function(c){regions[c.box.x+','+c.box.y]='Други';});
   var cards=result.visible.slice().sort(function(a,b){return a.box.y-b.box.y||a.box.x-b.box.x;});
-  var lines=[sourceInfo?'Източник: '+sourceInfo.originalWidth+'×'+sourceInfo.originalHeight+' → OCR: '+sourceInfo.ocrWidth+'×'+sourceInfo.ocrHeight+(sourceInfo.canonical?' (каноничен мащаб ACR)':' (общ мащаб)'):'Източник: видео кадър',
+  var lines=['OCR версия: r5 | '+(vision.templateCoverage?'13 стойности и 4 бои са представени в образците':'проверка на образците недостъпна'),
+    sourceInfo?'Източник: '+sourceInfo.originalWidth+'×'+sourceInfo.originalHeight+' → OCR: '+sourceInfo.ocrWidth+'×'+sourceInfo.ocrHeight+(sourceInfo.canonical?' (каноничен мащаб ACR)':' (общ мащаб)'):'Източник: видео кадър',
     'Открити правоъгълници: '+cards.length,
     'Потвърдени стойност+боя: '+cards.filter(function(c){return !!c.code;}).length,
     'Непотвърдени: '+cards.filter(function(c){return !c.code;}).length];
