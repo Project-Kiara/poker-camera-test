@@ -2,8 +2,8 @@
 (function(){
  'use strict';
  var vision=window.ACRVision,video=document.getElementById('camera');
- var analysis=document.getElementById('analysisPanel');
- if(!vision||!analysis||!window.PokerMath||!window.PokerCardDetector||!video)return;
+ var analysis=document.getElementById('analysisPanel'),bridge=window.PokerDealBridge;
+ if(!vision||!analysis||!window.PokerMath||!window.PokerCardDetector||!video||!bridge)return;
  var section=document.createElement('section');
  section.className='panel';section.id='autoRecognition';
  section.innerHTML=[
@@ -14,6 +14,7 @@
   '<p id="visionHero" style="color:#a8dcff">Моите карти: —</p>',
   '<p id="visionSeats">Активни ръце: —</p>',
   '</div>',
+  '<p class="hint" id="dealMemoryLine" aria-live="polite" style="margin:3px 0 6px;font-size:11px">Раздаване 1 · видени 0 карти</p>',
   '<div id="probabilityMount"></div>',
   '<div class="capture-actions">',
   '<button type="button" class="start" id="captureFrame" disabled>📷 Снимай</button>',
@@ -31,6 +32,12 @@
   '<label><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label>',
   '</div>',
   '<p class="hint" id="visionOthers">Други открити карти: —</p>',
+  '<p class="hint"><a href="./hand-memory-tests.html?v=r9">Тестове на паметта и математиката</a></p>',
+  '<p class="hint">Чуждите открити карти не са автоматично фолднали. Потвърди само двойка карти от един играч:</p>',
+  '<div class="config-row"><div><label for="memoryCardA">Чужда карта 1</label><select id="memoryCardA"></select></div><div><label for="memoryCardB">Чужда карта 2</label><select id="memoryCardB"></select></div></div>',
+  '<div class="capture-actions"><button type="button" class="secondary" id="confirmMemoryFold">Потвърди фолд</button><button type="button" class="secondary" id="confirmMemoryShowdown">Потвърди шоудаун</button></div>',
+  '<p class="hint" id="memoryActionStatus" role="status" aria-live="polite">Няма потвърдени чужди ръце.</p>',
+  '<button type="button" class="secondary" id="manualNextHand" style="width:100%;min-height:36px;font-size:12px">Ново раздаване (ръчно)</button>',
   '<div id="technicalMount"></div>',
   '<canvas id="visionDebug" hidden aria-label="Открити карти в снимката" style="width:100%;height:auto;margin-top:8px;border-radius:9px"></canvas>',
   '<details id="ocrReport"><summary>Подробна диагностика на всяка карта</summary>',
@@ -60,6 +67,10 @@
  [summaryDetails,summaryNotes].forEach(function(el){
   if(el&&technicalMount)technicalMount.appendChild(el);
  });
+ // Let the player correct the uncertain automatic player count and Monte Carlo strength
+ // without exposing the manual card-entry form.
+ var playerSettings=analysis.querySelector('.config-row');
+ if(playerSettings&&technicalMount)technicalMount.appendChild(playerSettings);
  analysis.hidden=true;
  var file=document.getElementById('recognitionFile'),status=document.getElementById('visionStatus');
  var captureButton=document.getElementById('captureFrame');
@@ -72,8 +83,92 @@
  var contextCanvas=document.createElement('canvas'),ctx=contextCanvas.getContext('2d',{willReadFrequently:true});
  var lastSignature='',repeats=0,lastApplied='',frameWorking=false;
  var ownCodes=[],boardCodes=[],previousHeroWasAuto=false;
+ var memoryLine=document.getElementById('dealMemoryLine');
+ var memoryA=document.getElementById('memoryCardA'),memoryB=document.getElementById('memoryCardB');
+ var memoryStatus=document.getElementById('memoryActionStatus');
+ var memoryOptionsSignature=null;
  var suitSymbols={c:'♣',d:'♦',h:'♥',s:'♠'};
  function shown(code){return code?code.slice(0,-1)+suitSymbols[code.slice(-1)]:'?';}
+ function notifyMemory(){document.dispatchEvent(new Event('poker:deal-changed'));}
+ function clearAutoInputs(){
+  var modified=false;
+  ['hero0','hero1','board0','board1','board2','board3','board4','deadCards','pot','callAmount'].forEach(function(id){
+   modified=changeField(id,'')||modified;
+  });
+  boardCodes=[];ownCodes=[];previousHeroWasAuto=false;lastApplied='';
+  if(!modified)notifyMemory();
+ }
+ function selectMemoryOptions(el,available){
+  var value=el.value;el.textContent='';
+  var first=document.createElement('option');first.value='';first.textContent='— избери —';el.appendChild(first);
+  available.forEach(function(code){
+   var x=document.createElement('option');x.value=code;x.textContent=shown(code);el.appendChild(x);
+  });
+  if(available.indexOf(value)>=0)el.value=value;
+ }
+ function renderMemory(snap){
+  var showdownCards=[].concat.apply([],snap.knownOpponents);
+  var available=snap.revealedOther.filter(function(code){return snap.dead.indexOf(code)<0&&showdownCards.indexOf(code)<0;});
+  memoryLine.textContent='Раздаване '+snap.hand+' · видени '+snap.seen.length+
+   ' карти · фолд '+snap.dead.length+' · известни чужди ръце '+snap.knownOpponents.length+
+   (snap.resetPending?' · ново раздаване? '+snap.resetPending+'/3':'');
+  var signature=available.join('|');
+  if(memoryOptionsSignature!==signature){
+   selectMemoryOptions(memoryA,available);selectMemoryOptions(memoryB,available);
+   memoryOptionsSignature=signature;
+  }
+ }
+ function refreshMath(){
+  notifyMemory();
+  if(bridge.snapshot().resetPending)return;
+  var run=document.getElementById('runAnalysis');
+  if(run&&getField('hero0')!==''&&getField('hero1')!==''&&!run.disabled)run.click();
+ }
+ function confirmMemory(kind){
+  var a=memoryA.value,b=memoryB.value;
+  if(!a||!b||a===b){
+   memoryStatus.textContent='Избери две различни карти от една и съща чужда ръка.';return;
+  }
+  try{
+   var now=bridge.confirmOpponent([a,b],kind);renderMemory(now);
+   memoryStatus.textContent=kind==='folded'?'Фолд: '+shown(a)+' '+shown(b):
+     'Шоудаун: '+shown(a)+' '+shown(b);
+   refreshMath();
+  }catch(err){memoryStatus.textContent='Неуспешно потвърждение: '+err.message;}
+ }
+ document.getElementById('confirmMemoryFold').addEventListener('click',function(){confirmMemory('folded');});
+ document.getElementById('confirmMemoryShowdown').addEventListener('click',function(){confirmMemory('showdown');});
+ document.getElementById('manualNextHand').addEventListener('click',function(){
+  var now=bridge.nextHand();clearAutoInputs();renderMemory(now);
+  memoryStatus.textContent='Ново раздаване: старата памет е изчистена.';
+  status.textContent='Паметта е нулирана за ново раздаване.';
+  lastSignature='';repeats=0;
+ });
+ function ingestMemory(result){
+  var update=bridge.observe(result);
+  if(result.stageConfirmed!==true||result.uniqueCards!==true){
+   clearAutoInputs();renderMemory(update.state);
+   status.textContent='Непотвърдено разпознаване — изчисленията са спрени.';
+   return false;
+  }
+  if(update.handChanged){
+   clearAutoInputs();
+   memoryStatus.textContent='Ново раздаване е потвърдено; паметта е нулирана.';
+  }
+  renderMemory(update.state);
+  if(update.pending){
+   clearAutoInputs();
+   status.textContent='Проверка за ново раздаване ('+update.state.resetPending+'/3). Изчисленията са спрени.';
+   return false;
+  }
+  if(update.inconsistent){
+   clearAutoInputs();
+   status.textContent='Неочаквана смяна на личните карти на ривъра. Изчислението е спряно.';
+   return false;
+  }
+  return true;
+ }
+ renderMemory(bridge.snapshot());
  function readRank(c){return c.rank?c.rank:'непотвърдена';}
  function readSuit(c){return c.suit?(suitSymbols[c.suit]||c.suit):'непотвърдена';}
  function diagnostics(result,sourceInfo){
@@ -196,7 +291,7 @@
   emitText(result,confirmed);
   diagnostics(result,sourceInfo);
   seatLine.textContent+=' · обработка '+(Date.now()-start)+' ms';
-  if(confirmed)applyResult(result);
+  if(confirmed&&ingestMemory(result))applyResult(result);
   return result;
  }
  function canvasImage(element,fullResolution){
@@ -251,7 +346,7 @@
     });
     drawDebug(img,frame,result);
     lastSignature='';repeats=0;lastApplied='';
-    if(result.faceCount&&result.visible.every(function(c){return !!c.code;}))
+    if(!bridge.snapshot().resetPending&&result.faceCount&&result.visible.every(function(c){return !!c.code;}))
        status.textContent='Снимката е обработена: '+result.faceCount+' четливи открити карти. '+(getField('hero0')!==''?'':'Личните карти не се виждат.');
    }catch(err){status.textContent='Неуспешно разчитане: '+err.message;}
    URL.revokeObjectURL(source);
@@ -276,7 +371,10 @@
     emitText(result,isStable);
     if(isStable)diagnostics(result);
     seatLine.textContent+=' · обработка '+(Date.now()-startedAt)+' ms';
-    if(isStable&&lastApplied!==signature){applyResult(result);lastApplied=signature;}
+    if(isStable){
+     var accept=ingestMemory(result);
+     if(accept&&lastApplied!==signature){applyResult(result);lastApplied=signature;}
+    }
    }catch(err){status.textContent='Грешка при разпознаване: '+err.message;}
    frameWorking=false;
   }

@@ -271,7 +271,9 @@
     })();
   </script>
 
-  <script src="./poker-engine.js?v=ocr-calibrated-r8"></script>
+  <script src="./poker-engine.js?v=deal-memory-r9"></script>
+  <script src="./hand-tracker.js?v=deal-memory-r9"></script>
+  <script src="./deal-bridge.js?v=deal-memory-r9"></script>
   <script>
   (function () {
     'use strict';
@@ -322,6 +324,8 @@
       document.getElementById(id).addEventListener('input', markChanged);
       document.getElementById(id).addEventListener('change', markChanged);
     });
+    // Invalidate completed or running simulations whenever confirmed card memory changes.
+    document.addEventListener('poker:deal-changed', markChanged);
 
     function clearResults() {
       win.textContent = '—'; lose.textContent = '—'; tie.textContent = '—';
@@ -371,6 +375,12 @@
         details.appendChild(p);
       }
       addLine('Еквити (вкл. поделен пот)', pct(result.equity));
+      if(window.PokerDealBridge){
+        var memory=window.PokerDealBridge.snapshot();
+        addLine('Раздаване',String(memory.hand));
+        if(memory.dead.length)addLine('Потвърдени фолднали карти',memory.dead.map(function(c){return math.label(math.idFromCode(c));}).join(' '));
+        if(memory.knownOpponents.length)addLine('Разкрити активни чужди ръце',String(memory.knownOpponents.length));
+      }
       addLine('Проверени раздавания', result.done.toLocaleString('bg-BG'));
       if (pot !== null && call !== null) {
         if (call === 0) addLine('Цена за кол', '0 — няма необходим залог за кол.');
@@ -400,11 +410,13 @@
             board.push(v);
           }
         });
-        var dead = parseDeadCards(document.getElementById('deadCards').value);
+        if(!window.PokerDealBridge)throw new Error('Модулът за паметта не е зареден. Презареди страницата.');
+        var remembered=window.PokerDealBridge.context();
+        var dead = parseDeadCards(document.getElementById('deadCards').value).concat(remembered.dead);
         pot = getNonnegativeNumber('pot'); call = getNonnegativeNumber('callAmount');
         if ((pot === null) !== (call === null)) throw new Error('За пот оддс въведи и пота, и сумата за кол.');
         simulation = math.simulator({
-          hero: hero, board: board, dead: dead,
+          hero: hero, board: board, dead: dead, knownOpponents: remembered.knownOpponents,
           players: Number(document.getElementById('players').value),
           iterations: Number(document.getElementById('simCount').value)
         });
@@ -444,6 +456,6 @@
   </script>
 <script src="./card-detector.js?v=ocr-calibrated-r8"></script>
   <script src="./acr-vision.js?v=ocr-calibrated-r8"></script>
-  <script src="./acr-auto.js?v=ocr-calibrated-r8"></script>
+  <script src="./acr-auto.js?v=deal-memory-r9"></script>
 </body>
 </html>
