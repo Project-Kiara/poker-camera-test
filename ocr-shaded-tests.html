@@ -3,7 +3,7 @@
 <style>body{background:#101927;color:#f2f6ff;max-width:760px;margin:22px auto;padding:0 16px;font:15px/1.5 system-ui}
 button{background:#7ddcbb;border:0;border-radius:9px;padding:12px;font-weight:700}li{padding:8px;border-bottom:1px solid #3b5069}.yes{color:#83ecae}.no{color:#ff939f}a{color:#9ee2ff}</style></head>
 <body><h1>Тестове за затъмнени карти и позиция на ръката</h1>
-<p>Тестови модели с ACR геометрия: пет общи карти, две долни карти, полупрозрачен банер, липсваща карта и чужди ръце.
+<p>Тестови портретни и широки кадри с ACR геометрия: пет общи карти, две долни карти, полупрозрачен банер, липсваща карта и чужди ръце.
 Тестовете проверяват откриването и групирането, а не доказват точността на OCR върху реална камера.</p>
 <button id="run">Стартирай тестовете</button><p id="summary" aria-live="polite">Още не са пуснати.</p><ol id="results"></ol>
 <p><a href="./">Към приложението</a> · <a href="./ocr-regression.html">Общи OCR тестове</a></p>
@@ -32,6 +32,13 @@ function fixture(opts){
  }
  return ctx.getImageData(0,0,w,h);
 }
+function landscapeFixture(){
+ var canvas=document.createElement('canvas');canvas.width=1000;canvas.height=600;
+ var c=canvas.getContext('2d');c.fillStyle='#12512f';c.fillRect(0,0,1000,600);
+ c.fillStyle='#f8f8f8';for(var i=0;i<5;i++)c.fillRect(234+i*97,145,82,126);
+ c.fillStyle='#969696';c.fillRect(350,435,91,139);c.fillRect(445,435,91,139);
+ return c.getImageData(0,0,1000,600);
+}
 function check(name,image,expected,board,hero){
  var boxes=window.PokerCardDetector.detect(image);
  var grouped=window.ACRVision.groupVisible(boxes.map(function(b){return {box:b,code:null};}),image.width,image.height);
@@ -45,7 +52,8 @@ document.getElementById('run').addEventListener('click',function(){
   check('WINNER банер върху личните карти',fixture({banner:true}),7,5,2),
   check('Без лични карти: не се измислят',fixture({hero:false}),5,5,0),
   check('Само една затъмнена карта: не се измисля двойка',fixture({two:false}),5,5,0),
-  check('Други открити ръце не се приемат за мои',fixture({hero:false,foreign:true}),9,5,0)
+  check('Други открити ръце не се приемат за мои',fixture({hero:false,foreign:true}),9,5,0),
+  check('Широк видео кадър с частично затъмнени карти',landscapeFixture(),7,5,2)
  ];
  var list=document.getElementById('results');list.textContent='';
  tests.forEach(function(t){var li=document.createElement('li');li.className=t.pass?'yes':'no';
