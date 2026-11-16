@@ -60,7 +60,7 @@
     h1 { font-size: clamp(19px,5vw,24px); margin: 0 0 2px; line-height: 1.15; }
     .subtitle { font-size: 11px; margin: 0 0 8px; line-height:1.25; color:#aebfd2; }
     .camera-layout { display:grid; grid-template-columns:minmax(112px, 40%) minmax(0,1fr); gap:10px; align-items:stretch; }
-    .camera-layout .preview { width:100%; aspect-ratio:9/16; height:auto; max-height:235px; border-radius:10px; }
+    .camera-layout .preview { width:min(100%,132px); aspect-ratio:9/16; height:auto; border-radius:10px; }
     .camera-layout video { object-fit:contain; }
     .camera-layout .placeholder { padding:8px; font-size:11px; }
     .camera-layout .buttons { display:grid; grid-template-columns:1fr; grid-template-rows:repeat(4,minmax(0,1fr)); gap:6px; margin:0; }
@@ -271,7 +271,7 @@
     })();
   </script>
 
-  <script src="./poker-engine.js?v=ocr-all52-20261116-r5a"></script>
+  <script src="./poker-engine.js?v=ui-compact-20261116-r6"></script>
   <script>
   (function () {
     'use strict';
@@ -442,8 +442,8 @@
     });
   }());
   </script>
-<script src="./card-detector.js?v=ocr-all52-20261116-r5a"></script>
-  <script src="./acr-vision.js?v=ocr-all52-20261116-r5a"></script>
-  <script src="./acr-auto.js?v=ocr-all52-20261116-r5a"></script>
+<script src="./card-detector.js?v=ui-compact-20261116-r6"></script>
+  <script src="./acr-vision.js?v=ui-compact-20261116-r6"></script>
+  <script src="./acr-auto.js?v=ui-compact-20261116-r6"></script>
 </body>
 </html>
