@@ -100,8 +100,10 @@
   }
  }
  function inspect(img,confirmed){
+  var start=Date.now();
   var result=vision.analyze(img);
   emitText(result,confirmed);
+  seatLine.textContent+=' · обработка '+(Date.now()-start)+' ms';
   if(confirmed)applyResult(result);
   return result;
  }
@@ -136,6 +138,7 @@
   if(video.readyState>=2&&video.videoWidth&&!video.paused){
    frameWorking=true;
    try{
+    var startedAt=Date.now();
     var result=vision.analyze(canvasImage(video,false));
     var signature=result.board.map(function(c){return c.code||'?';}).join('|')+','+
        result.hero.map(function(c){return c.code||'?';}).join('|')+','+result.coveredHands;
@@ -143,6 +146,7 @@
     lastSignature=signature;
     var isStable=repeats>=2;
     emitText(result,isStable);
+    seatLine.textContent+=' · обработка '+(Date.now()-startedAt)+' ms';
     if(isStable&&lastApplied!==signature){applyResult(result);lastApplied=signature;}
    }catch(err){status.textContent='Грешка при разпознаване: '+err.message;}
    frameWorking=false;
