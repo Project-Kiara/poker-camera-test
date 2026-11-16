@@ -54,21 +54,74 @@
     .analysis-details b { color: #fff; }
     .fineprint { font-size: 12px; color: #9fb1c7; margin: 11px 0 0; }
     @media(max-width:360px) { .panel {padding:11px;} .card-row{gap:4px;} .card-row select{padding:9px 2px;} }
+
+    /* Compact portrait camera and one-screen mobile presentation (UI r6). */
+    .main { max-width: 640px; padding: max(9px, env(safe-area-inset-top)) 10px max(12px, env(safe-area-inset-bottom)); }
+    h1 { font-size: clamp(19px,5vw,24px); margin: 0 0 2px; line-height: 1.15; }
+    .subtitle { font-size: 11px; margin: 0 0 8px; line-height:1.25; color:#aebfd2; }
+    .camera-layout { display:grid; grid-template-columns:minmax(112px, 40%) minmax(0,1fr); gap:10px; align-items:stretch; }
+    .camera-layout .preview { width:100%; aspect-ratio:9/16; height:auto; max-height:235px; border-radius:10px; }
+    .camera-layout video { object-fit:contain; }
+    .camera-layout .placeholder { padding:8px; font-size:11px; }
+    .camera-layout .buttons { display:grid; grid-template-columns:1fr; grid-template-rows:repeat(4,minmax(0,1fr)); gap:6px; margin:0; }
+    .camera-layout .buttons button { min-height:0; padding:5px 7px; border-radius:9px; font-size:12px; line-height:1.2; }
+    .camera-state {display:flex;align-items:baseline;flex-wrap:wrap;gap:7px;margin:6px 0 8px;font-size:11px;color:#bdccdf;}
+    .camera-state #status {font-size:11px;flex:1;min-width:130px;}
+    .camera-state details{position:relative;}
+    .camera-state summary{cursor:pointer;font-size:11px;color:#8edbfa;}
+    .camera-state details p{margin:4px 0 0;font-size:11px;}
+    .panel { margin:7px 0; padding:9px 10px; border-radius:11px; }
+    .panel h2 { font-size:16px; margin:0 0 5px;line-height:1.2;}
+    #analysisPanel[hidden] {display:none !important;}
+    #autoRecognition .reading-summary {display:grid;gap:3px;margin-bottom:6px;}
+    #autoRecognition .reading-summary p {font-size:12px !important;line-height:1.3 !important;margin:0 !important;word-break:break-word;}
+    #autoRecognition #visionCards,#autoRecognition #visionHero{font-size:13px !important;font-weight:700;}
+    #autoRecognition #visionSeats,#autoRecognition #visionStage{font-size:11px!important;color:#c7d5e4;}
+    #autoRecognition .result-grid {margin:7px 0 6px;gap:5px;}
+    #autoRecognition .result-grid > div {padding:6px 3px;border-radius:8px;}
+    #autoRecognition .result-grid small {font-size:11px;}
+    #autoRecognition .result-grid strong {font-size:clamp(19px,5vw,24px);margin:2px 0;}
+    #autoRecognition .actions { margin:5px 0 7px;gap:7px; }
+    #autoRecognition .actions button { min-height:35px;font-size:13px;padding:6px 8px; }
+    #autoRecognition .capture-actions {display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:7px;}
+    #autoRecognition .capture-actions button{min-height:38px;padding:7px;font-size:13px;}
+    #autoRecognition .analysis-message { font-size:11px;margin:3px 0;min-height:0;line-height:1.3; }
+    #autoRecognition .analysis-details{font-size:11px;line-height:1.3;margin-top:5px;}
+    #autoRecognition .analysis-details p {margin:3px 0;}
+    #autoRecognition .extra-settings {margin-top:7px;border-top:1px solid #34465e;padding-top:6px;}
+    #autoRecognition .extra-settings summary{cursor:pointer;font-size:11px;color:#a6cce0;}
+    #autoRecognition .extra-settings .hint{font-size:11px;line-height:1.3;margin:5px 0;}
+    #autoRecognition .extra-settings label{font-size:11px;}
+    #autoRecognition input[type="file"] {font-size:12px;}
+    #autoRecognition .fineprint {font-size:10px;line-height:1.3;margin:6px 0;}
+    .foot {font-size:10px;margin:6px 2px 0;line-height:1.3;}
+    @media(max-width:370px) {
+      .camera-layout{grid-template-columns:minmax(105px,40%) minmax(0,1fr);gap:7px}
+      .camera-layout .buttons button{font-size:11px}
+      #autoRecognition .reading-summary p{font-size:11px!important;}
+    }
+
   </style>
 </head>
 <body>
   <main class="main">
     <h1>Покер анализатор</h1>
-    <p>Експериментална версия за iPhone. Камера, разчитане на видимите карти в ACR Poker и локални вероятности — без микрофон, запис на видео или връзка с покер клиент.</p>
-    <div class="preview" id="preview">
+    <p class="subtitle">Карти и вероятности · ACR Poker</p>
+    <div class="camera-layout">
+      <div class="preview" id="preview">
       <video id="camera" autoplay muted playsinline webkit-playsinline></video>
       <div class="placeholder">Натисни „Включи камерата“, за да видиш картината тук.</div>
     </div>
-    <div class="buttons">
-      <button id="start" class="start">Включи камерата</button>
-      <button id="stop" class="stop" disabled>Спри камерата</button>
-      <button id="flip" class="secondary" disabled>Смени камерата</button>
-      <button id="measure" class="secondary" disabled>Провери картината</button>
+      <div class="buttons" aria-label="Управление на камерата">
+        <button id="start" class="start">Включи камера</button>
+        <button id="stop" class="stop" disabled>Спри камера</button>
+        <button id="flip" class="secondary" disabled>Смени камера</button>
+        <button id="measure" class="secondary" disabled>Провери кадъра</button>
+      </div>
+    </div>
+    <div class="camera-state" aria-live="polite">
+      <span id="status">Състояние: не е стартирана.</span>
+      <details><summary>Детайли</summary><p id="details">Разрешението за камера ще бъде поискано след натискане на бутона.</p></details>
     </div>
 
     <section class="panel" id="analysisPanel">
@@ -117,11 +170,7 @@
       </div>
       <p class="fineprint">Вероятностите са ориентировъчни при случайни неизвестни карти на противниците. Не предсказват техните решения или точната им сила. Изчисленията се изпълняват само в браузъра.</p>
     </section>
-    <div class="info" aria-live="polite">
-      <p id="status">Състояние: не е стартирана.</p>
-      <p id="details">Разрешението за камера ще бъде поискано след натискане на бутона.</p>
-    </div>
-    <p class="foot">Постави телефона стабилно срещу монитор с демонстрационна покер маса. Страницата не изпраща кадри никъде. За достъп до камерата я отвори през HTTPS в Safari, а не като преглед на файл в друго приложение.</p>
+    <p class="foot">Обработката е локална. Неразпознатите карти не се отгатват.</p>
   </main>
   <script>
     (function () {
