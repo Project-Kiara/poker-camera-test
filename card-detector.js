@@ -57,6 +57,16 @@
 
       var cw = maxX-minX+1, ch = maxY-minY+1, ratio = cw/ch;
       var fill = tail / (cw*ch);
+      // ACR can visually touch two adjacent face-up hero cards, especially
+      // when the bottom avatar overlays both. Connected components then
+      // merge two cards into a single, too-wide rectangle (about 2.3x
+      // community-card width). Split only a verified two-lobe component.
+      var joined = splitJoinedHeroCards(bright, w, h, found,
+        minX,minY,cw,ch,tail);
+      if (joined) {
+        found.push(joined[0],joined[1]);
+        continue;
+      }
       if (tail >= minimumArea &&
           cw >= Math.max(10, w*0.025) &&
           ch >= Math.max(20, h*0.03) &&
@@ -73,6 +83,82 @@
     for (var k=0;k<faded.length;k++) found.push(faded[k]);
     found.sort(function(a,b){return a.x-b.x;});
     return found;
+  }
+
+  function splitJoinedHeroCards(mask,w,h,previous,minX,minY,cw,ch,area) {
+    if (area < Math.max(150,w*h*.0010) || cw/ch<.95 || cw/ch>1.7) return null;
+    if (minY/h<.58 || minY/h>.90) return null;
+    var center=(minX+cw/2)/w;
+    if (center<.20 || center>.80) return null;
+    // Anchor to real previously detected community cards where possible.
+    var possibleBoard=previous.filter(function(box){
+      return box.y+box.height<minY &&
+        minY-(box.y+box.height)<box.height*3.5 &&
+        Math.abs((box.x+box.width/2)/w-.5)<.42;
+    });
+    var board=null;
+    if(possibleBoard.length>=3){
+      possibleBoard.sort(function(a,b){return a.y-b.y;});
+      var row=possibleBoard.filter(function(b){
+        return Math.abs((b.y+b.height/2)-
+          (possibleBoard[0].y+possibleBoard[0].height/2))<
+          Math.max(b.height,possibleBoard[0].height)*.24;
+      });
+      if(row.length>=3){
+        var sumW=0,sumH=0;
+        row.forEach(function(b){sumW+=b.width;sumH+=b.height;});
+        board={w:sumW/row.length,h:sumH/row.length};
+      }
+    }
+    if(board){
+      if(cw<board.w*1.75 || cw>board.w*2.9 ||
+        ch<board.h*.85 || ch>board.h*1.8) return null;
+    } else {
+      // Conservative fallback for a preflop ACR portrait with no board.
+      if(h/w<1.7 || h/w>2.6 || cw<w*.17 || cw>w*.45 ||
+        ch<h*.07 || ch>h*.19 || minY/h<.66) return null;
+    }
+    // Find a narrow dark column gap around the midpoint of the merged pair.
+    // Check just the top part so a seat avatar cannot distort the gap.
+    var y0=Math.min(h-1,minY+Math.round(ch*.08));
+    var y1=Math.min(h,minY+Math.round(ch*.66));
+    var rows=y1-y0;
+    if(rows<20)return null;
+    var mid=minX+Math.floor(cw/2),from=Math.max(minX+1,mid-Math.round(cw*.12));
+    var to=Math.min(minX+cw-2,mid+Math.round(cw*.12));
+    var minCount=rows+1,cut=-1;
+    function columnCount(x){
+      var count=0;
+      for(var y=y0;y<y1;y++)count+=mask[y*w+x];
+      return count;
+    }
+    for(var x=from;x<=to;x++){
+      var n=columnCount(x);
+      if(n<minCount){minCount=n;cut=x;}
+    }
+    if(cut<0 || minCount>rows*.23)return null;
+    var gapLimit=Math.max(5,Math.floor(rows*.20));
+    var lo=cut,hi=cut;
+    while(lo>minX&&columnCount(lo-1)<=gapLimit)lo--;
+    while(hi<minX+cw-1&&columnCount(hi+1)<=gapLimit)hi++;
+    var gapWidth=hi-lo+1;
+    if(gapWidth<1 || gapWidth>cw*.10)return null;
+    var firstW=lo-minX,secondX=hi+1,secondW=minX+cw-secondX;
+    if(firstW<ch*.48 || firstW>ch*.88 ||
+       secondW<ch*.48 || secondW>ch*.88 ||
+       Math.abs(firstW-secondW)>Math.max(firstW,secondW)*.20)return null;
+    if(board&&(firstW<board.w*.72 || firstW>board.w*1.65 ||
+      secondW<board.w*.72 || secondW>board.w*1.65))return null;
+    function makeCard(x,width){
+      var pixels=0;
+      for(var py=minY;py<minY+ch;py++)
+        for(var px=x;px<x+width;px++)pixels+=mask[py*w+px];
+      var fill=pixels/(width*ch);
+      return fill>.42?{x:x,y:minY,width:width,height:ch,
+        pixelArea:pixels,fill:fill,joinedPair:true}:null;
+    }
+    var left=makeCard(minX,firstW),right=makeCard(secondX,secondW);
+    return left&&right?[left,right]:null;
   }
 
   function detectShadedCards(img,brightCards) {
