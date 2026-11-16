@@ -2,6 +2,7 @@
 (function(root){'use strict';
 var REF={"rank":{"5":["000000","000000","01ff80","03ffc0","03ffc0","03ffc0","03c000","03c000","038000","03fe00","07ff00","07ff80","07ffc0","0387c0","0003c0","0003c0","0783c0","0787c0","07cfc0","03ff80","03ff00","00fe00","000000","000000"],"6":["000000","000000","007f00","00ff80","01ffc0","03ffc0","03e1c0","07c080","07c000","07ff00","07ff80","07ffc0","07e3c0","07c1c0","0781c0","0781c0","0781c0","07c1c0","03e3c0","03ffc0","01ffc0","00ff80","000000","000000"],"7":["000000","000000","07ffe0","0fffe0","0fffe0","07ffe0","0003e0","0003c0","000780","000f00","000f00","001e00","003e00","003c00","007c00","007800","007800","00f800","00f000","00f000","00f000","01f000","000000","000000"],"8":["000000","000000","003800","00ff00","01ff80","03ff80","03e7c0","07c3c0","03c3c0","03ff80","01ff00","01ff00","03ff80","03efc0","07c3c0","0783c0","0783c0","07c3c0","07efc0","03ffc0","01ff80","00fe00","000000","000000"],"A":["000000","000000","001e00","003e00","003f00","007f00","007f80","007f80","00ff80","00ffc0","00f7c0","01f3c0","01e3e0","03e3e0","03e3f0","03fff0","07fff0","07fff8","07fff8","0f80f8","0f8078","1f8078","000000","000000"],"J":["000000","000000","0003c0","0003c0","0003c0","0003c0","0003c0","0003c0","0003c0","0003c0","0003c0","0003c0","0003c0","0003c0","01c3c0","03c3c0","03c3c0","01e3c0","01ffc0","00ffc0","00ff80","003e00","000000","000000"]},"suit":{"c":["000000","000000","00ff80","01ff80","01ff80","01ff80","01ff80","00ffc0","03fff0","0ffff8","1ffffc","1ffffc","3ffffc","3ffffc","1ffffc","0ffffc","07fff8","000800","000c00","001c00","001e00","003e00","000000","000000"],"h":["000000","000000","0380e0","0ff7f8","1ffffc","3ffffc","3ffffc","3ffffc","3ffffc","3ffffc","1ffffc","1ffff8","07fff0","07ffe0","03ffc0","01ffc0","00ff80","00ff00","007e00","003e00","001c00","000000","000000","000000"],"s":["000000","000000","003c00","007e00","00ff00","01ff80","03ffe0","07fff0","0ffff8","3ffff8","3ffff8","3ffff8","3ffff8","1ffff8","0ffff8","07cdf8","000c00","001c00","001c00","001e00","003e00","003e00","000000","000000"]}};
 
+var RANK_VALUES=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 var CACHE=null;
 function matrixFromHex(rows){var o=new Uint8Array(576);for(var y=0;y<24;y++){var b=parseInt(rows[y],16);for(var x=0;x<24;x++)o[y*24+x]=(b>>(23-x))&1;}return o;}
 function maskNormalize(src,sw,sh){
@@ -25,9 +26,9 @@ function synthGlyph(glyph,font,weight){
 function templates(){
  if(CACHE)return CACHE;CACHE={rank:[],suit:[]};
  for(var kind in REF)for(var key in REF[kind])CACHE[kind].push({key:key,mask:matrixFromHex(REF[kind][key]),provenance:'acr'});
- var fonts=['Arial','Helvetica','sans-serif'],names='23456789TJQKA';
+ var fonts=['Arial','Helvetica','sans-serif'],names=RANK_VALUES;
  for(var j=0;j<names.length;j++)for(var f=0;f<fonts.length;f++){
-   var symbol=names.charAt(j),generated=synthGlyph(symbol==='T'?'10':symbol,fonts[f],f===2?'900':'700');
+   var symbol=names[j],generated=synthGlyph(symbol,fonts[f],f===2?'900':'700');
    if(generated)CACHE.rank.push({key:symbol,mask:generated,provenance:'font'});
  }
  for(var q=0;q<4;q++){
@@ -74,13 +75,13 @@ function matchSymbol(mask,kind){
 // prototypes are fallback-only, because they have not been calibrated on
 // verified screenshots of every rank and suit from ACR Poker.
 var FALLBACK_CACHE=null;
-var OCR_RANKS='23456789TJQKA',OCR_SUITS='cdhs';
+var OCR_RANKS=RANK_VALUES,OCR_SUITS='cdhs';
 function fallbackTemplates(kind){
  if(FALLBACK_CACHE)return FALLBACK_CACHE[kind];
  FALLBACK_CACHE={rank:[],suit:[]};
  var fonts=['Arial','Helvetica','Verdana','Tahoma','Georgia','sans-serif'];
  for(var k=0;k<OCR_RANKS.length;k++){
-  var rank=OCR_RANKS.charAt(k),texts=rank==='T'?['10','T']:[rank];
+  var rank=OCR_RANKS[k],texts=[rank];
   for(var f=0;f<fonts.length;f++)for(var v=0;v<texts.length;v++){
    var template=synthGlyph(texts[v],fonts[f],f%2?'900':'700');
    if(template)FALLBACK_CACHE.rank.push({key:rank,mask:template});
@@ -138,7 +139,7 @@ function templateCoverage(){
  var rank={},suit={},calibratedRank={},calibratedSuit={};
  base.rank.concat(secondary).forEach(function(x){rank[x.key]=true;if(x.provenance==='acr')calibratedRank[x.key]=true;});
  base.suit.concat(fallbackTemplates('suit')).forEach(function(x){suit[x.key]=true;if(x.provenance==='acr')calibratedSuit[x.key]=true;});
- var missingRanks=OCR_RANKS.split('').filter(function(x){return !rank[x];});
+ var missingRanks=OCR_RANKS.filter(function(x){return !rank[x];});
  var missingSuits=OCR_SUITS.split('').filter(function(x){return !suit[x];});
  return {ranks:OCR_RANKS.length-missingRanks.length,suits:OCR_SUITS.length-missingSuits.length,
   combinations:(OCR_RANKS.length-missingRanks.length)*(OCR_SUITS.length-missingSuits.length),
@@ -174,22 +175,21 @@ function selectGlyph(img,box,part){
  }
  return chosen;
 }
-function publicRank(value){return value==='T'?'10':value;}
 function classify(img,box){
  var rank=selectGlyph(img,box,'rank'),suit=selectGlyph(img,box,'suit');
- if(!rank||!suit)return {box:box,code:null,rank:rank&&rank.accepted?publicRank(rank.key):null,
+ if(!rank||!suit)return {box:box,code:null,rank:rank&&rank.accepted?rank.key:null,
   suit:suit&&suit.accepted?suit.key:null,rankDetected:!!rank,suitDetected:!!suit,
   reason:'Неясен символ в ъгъла на картата'};
  var validColor=rank.isRed===suit.isRed&&((suit.key==='h'||suit.key==='d')===suit.isRed);
  var rankOk=rank.accepted,suitOk=suit.accepted&&validColor;
  var good=rankOk&&suitOk;
- return {box:box,code:good?publicRank(rank.key)+suit.key:null,
-   rank:rankOk?publicRank(rank.key):null,suit:suitOk?suit.key:null,
+ return {box:box,code:good?rank.key+suit.key:null,
+   rank:rankOk?rank.key:null,suit:suitOk?suit.key:null,
    rankDetected:!!rank,suitDetected:!!suit,
    rankScore:Math.round(rank.score*100),suitScore:Math.round(suit.score*100),
    rankMargin:Math.round(rank.margin*100),suitMargin:Math.round(suit.margin*100),
    rankSource:rank.source||'unknown',suitSource:suit.source||'unknown',
-   guess:publicRank(rank.key)+suit.key,confidence:Math.round(100*Math.min(rank.score,suit.score)),
+   guess:rank.key+suit.key,confidence:Math.round(100*Math.min(rank.score,suit.score)),
    reason:good?'':!validColor?'Несъответствие между цвят и боя':
     !rankOk&&!suitOk?'Непотвърдени стойност и боя':!rankOk?'Непотвърдена стойност':'Непотвърдена боя'};
 }
