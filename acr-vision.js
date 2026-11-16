@@ -76,7 +76,11 @@ function glyphMask(img,box,part,variant){
   var red=r>76&&r>1.3*g&&r>1.2*b,black=Math.max(r,g,b)<blackLimit;
   if(red||black){src[y*w+x]=1;if(red)redCount++;else blackCount++;}
  }
- return {mask:maskNormalize(src,w,h),isRed:redCount>blackCount*1.2,count:redCount+blackCount};
+ return {mask:maskNormalize(src,w,h),
+  // Shaded red ink can overlap neutral gray shadows. Require several red
+  // pixels and retain the strict test for normal bright cards.
+  isRed:redCount>=8&&redCount>blackCount*(box.shaded?.09:1.2),
+  count:redCount+blackCount};
 }
 function similarity(a,b){var common=0,all=0;for(var i=0;i<576;i++){if(a[i]||b[i]){all++;if(a[i]&&b[i])common++;}}return all?common/all:0;}
 function matchSymbol(mask,kind){
