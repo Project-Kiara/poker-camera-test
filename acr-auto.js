@@ -28,7 +28,7 @@
   '<summary>Допълнителни данни и OCR диагностика</summary>',
   '<p class="hint" id="ocrVersion">Интерфейс r6 · OCR r8 · 16.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
-  '<p class="hint"><a href="./ocr-selftest.html?v=r8">Тест на 52 синтетични карти</a> · <a href="./ocr-regression.html?v=r8">Разширена ACR диагностика</a></p>',
+  '<p class="hint"><a href="./ocr-selftest.html?v=r8">Тест на 52 синтетични карти</a> · <a href="./ocr-regression.html?v=r8">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r10">Тестове на затъмнени карти</a></p>',
   '<div class="config-row">',
   '<label><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>',
   '<label><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label>',
