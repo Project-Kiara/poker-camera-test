@@ -23,9 +23,17 @@ function synthGlyph(glyph,font,weight){
  for(var i=0;i<mask.length;i++)if(src[i*4]<150)mask[i]=1;
  return maskNormalize(mask,110,95);
 }
+// Calibrated glyph silhouettes from two verified 709-pixel ACR Poker screenshots.
+// Includes both board-sized and exposed-hand-sized ranks. These are glyphs only,
+// not screenshots or personal/gameplay data. Newer screenshots still need testing.
+var REAL_ACR_MASKS={"rank":{"4":["000000 000000 000780 000f80 001f80 003f80 003f80 007780 00e780 00e780 01c780 01c780 078780 070780 07ffe0 07ffe0 07ffe0 07ffe0 000780 000780 000780 000780 000000 000000"],"8":["000000 000000 00ff00 00ff00 03ffc0 03ffc0 03e7c0 03e3c0 03e3c0 03ffc0 03ffc0 03ffc0 03ffc0 03ffc0 0fe3e0 0fe3e0 0f83e0 0fe3e0 0fe3e0 03ffc0 03ffc0 00ff00 000000 000000","000000 000000 001c00 00ff00 01ff80 01ffc0 03e7c0 03c3c0 03c3c0 01ffc0 00ff80 00ff80 01ffc0 03f7c0 03c3c0 07c1c0 07c1c0 07c3c0 03f7c0 03ffc0 01ff80 00ff00 000000 000000"],"10":["000000 000000 000000 0101c0 0383f0 0787f8 3f8ffc 3f8f3c 3f9e1c 079e1c 079e1c 079e1c 079e1c 079e1c 079e1c 079e1c 078f3c 078ffc 0787f8 0303f0 000000 000000 000000 000000","000000 000000 000000 0101c0 0783f0 0787f8 3f8ffc 3f9e3c 3f9e3c 079e1c 079c1c 079c1c 079c1c 079e1c 079e1c 079e3c 079e3c 078ffc 0787f8 0303f0 000000 000000 000000 000000"]},"suit":{"d":["000000 000000 001c00 003e00 003e00 007f00 00ff80 01ffc0 01ffc0 03ffe0 07fff0 0ffff8 0ffff8 07fff0 03ffe0 01ffc0 01ff80 00ff80 007f00 003e00 003e00 001c00 000000 000000"],"c":["000000 000000 007fc0 007fc0 01ffc0 01ffc0 007fc0 03fff8 03fff8 0ffffc 3ffffc 3ffffc 3ffffc 0ffffc 0ffffc 03fff8 000800 000800 000e00 003e00 003e00 003e00 000000 000000"],"h":["000000 000000 000000 03f7e0 03f7e0 0ffff8 0ffff8 3ffff8 3ffffc 3ffffc 0ffff8 0ffff8 0ffff8 03ffe0 01ffc0 01ffc0 007f00 007f00 007f00 003e00 000000 000000 000000 000000"]}};
 function templates(){
  if(CACHE)return CACHE;CACHE={rank:[],suit:[]};
  for(var kind in REF)for(var key in REF[kind])CACHE[kind].push({key:key,mask:matrixFromHex(REF[kind][key]),provenance:'acr'});
+  for(var realKind in REAL_ACR_MASKS)for(var realKey in REAL_ACR_MASKS[realKind]){
+    var examples=REAL_ACR_MASKS[realKind][realKey];
+    for(var ex=0;ex<examples.length;ex++)CACHE[realKind].push({key:realKey,mask:matrixFromHex(examples[ex].split(' ')),provenance:'acr'});
+  }
  var fonts=['Arial','Helvetica','sans-serif'],names=RANK_VALUES;
  for(var j=0;j<names.length;j++)for(var f=0;f<fonts.length;f++){
    var symbol=names[j],generated=synthGlyph(symbol,fonts[f],f===2?'900':'700');
