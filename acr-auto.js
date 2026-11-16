@@ -21,6 +21,8 @@
  '<p id="visionHero" style="font-size:16px;font-weight:700;color:#a8dcff;word-break:break-word;margin:7px 0">Моите карти: —</p>'+
  '<p class="hint" id="visionOthers" style="margin:6px 0">Други открити карти: —</p>'+
  '<p class="hint" id="visionSeats">Активни ръце: —</p>'+
+ '<details id="ocrReport" style="margin:10px 0"><summary style="cursor:pointer;font-weight:700">Подробна диагностика на всяка открита карта</summary>'+
+ '<div id="ocrCardReports" style="white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 monospace;padding:9px;background:#0d1b2b;border-radius:8px;margin-top:7px">Качи снимка, за да видиш отчета.</div></details>'+
  '<p class="fineprint">Снимките и видеокадрите не се изпращат. Оценката за броя активни играчи е по видимите покрити ръце, а не по всички места на масата. При скрити лични карти няма достатъчно информация за личен шанс.</p>';
  analysis.parentNode.insertBefore(section,analysis);
  // Keep the calculated probabilities directly below the camera/recognition area.
@@ -41,11 +43,38 @@
  var cardLine=document.getElementById('visionCards'),seatLine=document.getElementById('visionSeats');
  var heroLine=document.getElementById('visionHero'),othersLine=document.getElementById('visionOthers'),stageLine=document.getElementById('visionStage');
  var debugCanvas=document.getElementById('visionDebug');
+ var ocrReports=document.getElementById('ocrCardReports');
  var contextCanvas=document.createElement('canvas'),ctx=contextCanvas.getContext('2d',{willReadFrequently:true});
  var lastSignature='',repeats=0,lastApplied='',frameWorking=false;
  var ownCodes=[],boardCodes=[],previousHeroWasAuto=false;
  var suitSymbols={c:'♣',d:'♦',h:'♥',s:'♠'};
  function shown(code){return code?code.slice(0,-1).replace('T','10')+suitSymbols[code.slice(-1)]:'?';}
+ function readRank(c){return c.rank?c.rank.replace('T','10'):'непотвърдена';}
+ function readSuit(c){return c.suit?(suitSymbols[c.suit]||c.suit):'непотвърдена';}
+ function diagnostics(result){
+  var regions={};result.board.forEach(function(c){regions[c.box.x+','+c.box.y]='Борд';});
+  result.hero.forEach(function(c){regions[c.box.x+','+c.box.y]='Лични';});
+  result.others.forEach(function(c){regions[c.box.x+','+c.box.y]='Други';});
+  var cards=result.visible.slice().sort(function(a,b){return a.box.y-b.box.y||a.box.x-b.box.x;});
+  var lines=['Открити правоъгълници: '+cards.length,
+    'Потвърдени стойност+боя: '+cards.filter(function(c){return !!c.code;}).length,
+    'Непотвърдени: '+cards.filter(function(c){return !c.code;}).length];
+  cards.forEach(function(c,i){
+   var x=c.box.x,y=c.box.y;
+   var scoreRank=typeof c.rankScore==='number'?c.rankScore+'%':'няма';
+   var scoreSuit=typeof c.suitScore==='number'?c.suitScore+'%':'няма';
+   lines.push('#'+(i+1)+' '+(regions[x+','+y]||'Неуточнена')+
+    ' | рамка ('+Math.round(x)+','+Math.round(y)+') '+Math.round(c.box.width)+'×'+Math.round(c.box.height));
+   lines.push('  Стойност: '+readRank(c)+' | сходство '+scoreRank+
+    ' | разлика '+(c.rankMargin==null?'—':c.rankMargin+' пункта'));
+   lines.push('  Боя: '+readSuit(c)+' | сходство '+scoreSuit+
+    ' | разлика '+(c.suitMargin==null?'—':c.suitMargin+' пункта'));
+   lines.push('  Крайно: '+(c.code?shown(c.code):'НЕПОТВЪРДЕНА')+
+    (c.code?'':' | най-близък образец '+(c.guess?shown(c.guess):'няма'))+
+    ' | '+(c.reason||'потвърдено'));
+  });
+  ocrReports.textContent=lines.join('\n');
+ }
  function getField(id){var e=document.getElementById(id);return e?e.value:'';}
  function changeField(id,value){
   var e=document.getElementById(id);if(!e||e.value===String(value))return false;
@@ -135,6 +164,7 @@
   var start=Date.now();
   var result=vision.analyze(img);
   emitText(result,confirmed);
+  diagnostics(result);
   seatLine.textContent+=' · обработка '+(Date.now()-start)+' ms';
   if(confirmed)applyResult(result);
   return result;
@@ -179,6 +209,7 @@
     lastSignature=signature;
     var isStable=repeats>=2;
     emitText(result,isStable);
+    if(isStable)diagnostics(result);
     seatLine.textContent+=' · обработка '+(Date.now()-startedAt)+' ms';
     if(isStable&&lastApplied!==signature){applyResult(result);lastApplied=signature;}
    }catch(err){status.textContent='Грешка при разпознаване: '+err.message;}
