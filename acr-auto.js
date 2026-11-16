@@ -19,6 +19,16 @@
  '<p class="hint" id="visionSeats">Видими покрити ръце: —</p>'+
  '<p class="fineprint">Снимките и видеокадрите не се изпращат. Оценката за броя активни играчи е по видимите покрити ръце, а не по всички места на масата. При скрити лични карти няма достатъчно информация за личен шанс.</p>';
  analysis.parentNode.insertBefore(section,analysis);
+ // Keep the calculated probabilities directly below the camera/recognition area.
+ var summaryGrid=analysis.querySelector('.result-grid');
+ var summaryDetails=document.getElementById('analysisDetails');
+ var summaryMessage=document.getElementById('analysisMessage');
+ var seats=document.getElementById('visionSeats');
+ if(summaryGrid&&summaryDetails&&summaryMessage&&seats){
+   seats.insertAdjacentElement('afterend',summaryMessage);
+   summaryMessage.insertAdjacentElement('afterend',summaryGrid);
+   summaryGrid.insertAdjacentElement('afterend',summaryDetails);
+ }
  var css=document.createElement('style');
  css.textContent='#autoRecognition input[type="file"]{background:#203247;color:#f4f7fb;border:1px solid #52647b;padding:9px;border-radius:10px;font-size:14px}'+
  '.preview{aspect-ratio:auto;height:clamp(140px,32vh,240px)}#autoRecognition{margin-top:10px}';
@@ -98,7 +108,7 @@
  function canvasImage(element,fullResolution){
   var w=element.videoWidth||element.naturalWidth,h=element.videoHeight||element.naturalHeight;
   if(!w||!h)throw new Error('Няма изображение');
-  var factor=Math.min(1,fullResolution?1:1100/w,Math.sqrt(2000000/(w*h)));
+  var factor=Math.min(1,fullResolution?1:1280/w,Math.sqrt(2000000/(w*h)));
   contextCanvas.width=Math.max(1,Math.round(w*factor));
   contextCanvas.height=Math.max(1,Math.round(h*factor));
   ctx.drawImage(element,0,0,contextCanvas.width,contextCanvas.height);
