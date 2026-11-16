@@ -9,14 +9,14 @@ function createTracker(options){
   function clear(){seen={};other={};protectedCards={};dead={};showdown={};sawBoard=false;heroId='';pending='';pendingFrames=0;}
   function snapshot(){return {hand:hand,seen:keys(seen),revealedOther:keys(other),
       dead:keys(dead),knownOpponents:keys(showdown).map(function(k){return showdown[k].slice();}),
-      boardSeen:sawBoard,resetPending:pendingFrames};}
+      boardSeen:sawBoard,heroIdentity:heroId,resetPending:pendingFrames};}
   function observe(result){
-    if(!result||result.stageConfirmed!==true||result.uniqueCards!==true)return snapshot();
+    if(!result||result.stageConfirmed!==true||result.uniqueCards!==true){pending='';pendingFrames=0;return snapshot();}
     var board=codes(result.board),hero=codes(result.hero),outs=codes(result.others);
     var hasHero=(result.hero||[]).length===2&&hero.length===2&&hero[0]!==hero[1];
     var key=hasHero?hero.slice().sort().join('|'):'';
     var preflop=result.stage==='Префлоп'&&(result.board||[]).length===0;
-    var isNew=preflop&&hasHero&&((heroId&&key!==heroId)||(!heroId&&sawBoard));
+    var isNew=preflop&&hasHero&&(sawBoard||(heroId&&key!==heroId));
     if(isNew){
       pendingFrames=(pending===key)?pendingFrames+1:1;pending=key;
       // Do not put pending new cards into the previous deal before confirmation.
