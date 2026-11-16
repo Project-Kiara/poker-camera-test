@@ -10,16 +10,16 @@ table{border-collapse:collapse;width:100%;font-size:14px;margin-top:16px}th,td{b
 </style>
 </head>
 <body>
-<h1>Технически тест — 52 покер карти (OCR r7)</h1>
+<h1>Технически тест — 52 покер карти (OCR r8)</h1>
 <p>Тестът рисува 13 стойности × 4 бои върху синтетични карти и проверява разчитането им. Той НЕ удостоверява точност на всички 52 карти в реални ACR кадри.</p>
 <p id="bank">Проверявам наличните образци…</p>
 <button id="run">Пусни теста на 52 карти</button>
 <p id="summary" role="status">Тестът още не е стартиран.</p>
 <table><thead><tr><th>Очаквана</th><th>Разчетена</th><th>Резултат</th><th>Диагностика</th></tr></thead><tbody id="results"></tbody></table>
-<p class="hint"><a href="./">Назад към приложението</a>. Изпращане на изображения към сървър няма.</p>
-<script src="./poker-engine.js?v=ocr-engine10-r7"></script>
-<script src="./card-detector.js?v=ocr-engine10-r7"></script>
-<script src="./acr-vision.js?v=ocr-engine10-r7"></script>
+<p class="hint"><a href="./ocr-regression.html?v=r8">Разширена ACR диагностика</a> · <a href="./?v=r8">Назад към приложението</a>. Изпращане на изображения към сървър няма.</p>
+<script src="./poker-engine.js?v=ocr-calibrated-r8"></script>
+<script src="./card-detector.js?v=ocr-calibrated-r8"></script>
+<script src="./acr-vision.js?v=ocr-calibrated-r8"></script>
 <script>
 (function(){
 'use strict';
