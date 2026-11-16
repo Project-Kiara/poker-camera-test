@@ -67,6 +67,10 @@
  [summaryDetails,summaryNotes].forEach(function(el){
   if(el&&technicalMount)technicalMount.appendChild(el);
  });
+ // Let the player correct the uncertain automatic player count and Monte Carlo strength
+ // without exposing the manual card-entry form.
+ var playerSettings=analysis.querySelector('.config-row');
+ if(playerSettings&&technicalMount)technicalMount.appendChild(playerSettings);
  analysis.hidden=true;
  var file=document.getElementById('recognitionFile'),status=document.getElementById('visionStatus');
  var captureButton=document.getElementById('captureFrame');
@@ -82,7 +86,7 @@
  var memoryLine=document.getElementById('dealMemoryLine');
  var memoryA=document.getElementById('memoryCardA'),memoryB=document.getElementById('memoryCardB');
  var memoryStatus=document.getElementById('memoryActionStatus');
- var memoryOptionsSignature='';
+ var memoryOptionsSignature=null;
  var suitSymbols={c:'♣',d:'♦',h:'♥',s:'♠'};
  function shown(code){return code?code.slice(0,-1)+suitSymbols[code.slice(-1)]:'?';}
  function notifyMemory(){document.dispatchEvent(new Event('poker:deal-changed'));}
