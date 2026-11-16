@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACR OCR r8 — регресионни проверки</title><style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}body{max-width:790px;margin:auto;padding:16px;background:#101927;color:#ecf5fb}
+p{color:#c6d6e7;line-height:1.5}button{background:#64ddb4;color:#032519;border:0;border-radius:9px;padding:12px;font-weight:700}
+.result{border-bottom:1px solid #41516a;padding:8px 0;font-size:14px}.pass{color:#8bf7bb}.fail{color:#ffa1ad}a{color:#95dafb}
+</style></head><body><h1>ACR OCR r8 — разширена диагностика</h1>
+<p>Проверява алтернативни изрязвания на реални ACR глифове, откриването на правоъгълници, разделянето на борда от чуждите открити карти, отхвърлянето на празни карти и преобразуването на десетките. Образците включват калибрационни примери и не са независим тест на всичките 52 реални ACR карти.</p>
+<button id="run">Пусни регресионните проверки</button><p id="summary">Не са изпълнени.</p><div id="results"></div>
+<p><a href="./ocr-selftest.html?v=r8">Тест на 52 синтетични карти</a> · <a href="./?v=r8">Към приложението</a></p>
+<script src="./poker-engine.js?v=acr-r8"></script>
+<script src="./card-detector.js?v=acr-r8"></script>
+<script src="./acr-vision.js?v=acr-r8"></script>
+<script>
+(function(){
+'use strict';
+var samples=[["rank","10","10♦ — алтернативно изрязване","000000 000000 000000 0301c0 0387f0 078ff8 1f8ff8 3f8f3c 3f9e1c 079e1c 079e1c 079e1c 079e1c 079e1c 079e1c 079e1c 079e1c 078f3c 078ffc 078ff8 0307f0 000000 000000 000000"],["rank","10","10♥ — алтернативно изрязване","000000 000000 000000 0201c0 0787f0 078ff8 1f8ff8 3f9e3c 3f9e3c 0f9e1c 079e1c 07bc1c 07bc1c 07bc1c 07be1c 079e1c 079e3c 079e3c 078ff8 078ff8 0307e0 000000 000000"],["rank","8","8♥ — малка карта","000000 000000 00ff00 00ff00 03ffc0 03ffc0 03e7c0 03e3c0 03e3c0 03ffc0 03ffc0 03ffc0 03ffc0 03ffc0 0fe3e0 0fe3e0 0f83e0 0fe3e0 0fe3e0 03ffc0 03ffc0 00ff00 000000 000000"],["rank","4","4♣ — борд","000000 000000 000780 000f80 001f80 003f80 003f80 007780 00e780 00e780 01c780 01c780 078780 070780 07ffe0 07ffe0 07ffe0 07ffe0 000780 000780 000780 000780 000000 000000"],["suit","d","♦ — алтернативно изрязване","000000 000000 000800 001c00 003e00 003e00 00ff80 00ff80 01ffc0 01ffc0 07fff0 0ffff8 1ffff8 0ffff8 03ffe0 01ffc0 01ff80 00ff80 007f00 003e00 003e00 001c00 000000 000000"],["suit","h","♥ — алтернативно изрязване","000000 000000 000000 000000 0ffff8 0ffff8 3ffff8 3ffffc 3ffffc 0ffff8 0ffff8 0ffff8 03ffe0 01ffc0 01ffc0 007f00 007f00 007f00 003e00 000000 000000 000000 000000 000000"]];
+function fromHex(s){var parts=s.split(' '),out=new Uint8Array(576);if(parts.length!==24)throw Error('Невалиден образец');
+ for(var y=0;y<24;y++){var bits=parseInt(parts[y],16);for(var x=0;x<24;x++)out[y*24+x]=(bits>>(23-x))&1;}return out;}
+document.getElementById('run').addEventListener('click',function(){
+ var results=document.getElementById('results'),passed=0,failed=0;results.textContent='';
+ function verify(ok,title,info){if(ok)passed++;else failed++;var p=document.createElement('div');
+ p.className='result '+(ok?'pass':'fail');p.textContent=(ok?'✓ ':'✗ ')+title+(info?' — '+info:'');results.appendChild(p);}
+ try{
+  var vision=window.ACRVision,detector=window.PokerCardDetector,math=window.PokerMath;
+  if(!vision||!detector||!math)throw Error('Модул не е зареден');
+  samples.forEach(function(s){
+   var m=vision.matchSymbol(fromHex(s[3]),s[0]),first=m.first,other=m.second;
+   var margin=first?first.score-(other?other.score:0):0;
+   var valid=!!first&&first.key===s[1]&&first.score>=(s[0]==='rank'?.68:.71)&&margin>=(s[0]==='rank'?.043:.055);
+   verify(valid,s[2],first?first.key+' · сходство '+(first.score*100).toFixed(1)+'% · разлика '+(margin*100).toFixed(1)+' п.':'няма съвпадение');
+  });
+  var suits='cdhs',symbols='♣♦♥♠';
+  for(var j=0;j<4;j++){var id=math.idFromCode('10'+suits[j]);
+   verify(id===j*13+8&&math.label(id)==='10'+symbols[j],'Кодиране 10'+symbols[j]);}
+  var canvas=document.createElement('canvas');canvas.width=709;canvas.height=1536;
+  var g=canvas.getContext('2d',{willReadFrequently:true});
+  g.fillStyle='#073c28';g.fillRect(0,0,709,1536);g.fillStyle='#fff';
+  var boxes=[{x:55,y:627,width:47,height:73},{x:107,y:627,width:47,height:73}];
+  for(var b=0;b<5;b++)boxes.push({x:118+b*98,y:822,width:85,height:134});
+  boxes.forEach(function(b){g.fillRect(b.x,b.y,b.width,b.height);});
+  var frame=g.getImageData(0,0,709,1536),found=detector.detect(frame);
+  verify(found.length===7,'Детектор: 7 от 7 правоъгълника','намерени '+found.length);
+  var groups=vision.groupVisible(found.map(function(box){return {box:box,code:null};}),709,1536);
+  verify(groups.board.length===5&&groups.hero.length===0&&groups.others.length===2,
+    'Разделяне на петте общи и две чужди карти','борд '+groups.board.length+' · лични '+groups.hero.length+' · други '+groups.others.length);
+  var blank=vision.classify(frame,{x:118,y:822,width:85,height:134});
+  verify(blank.code===null,'Защита: празна карта не се приема за разчетена');
+ }catch(error){verify(false,'Грешка при тестовете',error.message);}
+ document.getElementById('summary').textContent=passed+' успешни, '+failed+' неуспешни проверки. Това не е гаранция за 100% разчитане на всеки реален ACR екран.';
+});
+}());
+</script></body></html>
