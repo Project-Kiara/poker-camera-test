@@ -14,9 +14,13 @@
  '<label style="margin:0"><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label></div>'+
  '<label for="recognitionFile">Тест със снимка от ACR Poker</label>'+
  '<input id="recognitionFile" type="file" accept="image/*" style="width:100%">'+
+ '<canvas id="visionDebug" hidden aria-label="Преглед на откритите зони в снимката" style="width:100%;height:auto;margin-top:10px;border-radius:9px"></canvas>'+
  '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Камерата не е стартирана. Можеш да избереш снимка.</p>'+
- '<p id="visionCards" style="font-size:17px;font-weight:700;color:#e1f8ee;word-break:break-word">Разпознати карти: —</p>'+
- '<p class="hint" id="visionSeats">Видими покрити ръце: —</p>'+
+ '<p class="hint" id="visionStage" style="margin:6px 0">Етап: —</p>'+
+ '<p id="visionCards" style="font-size:16px;font-weight:700;color:#e1f8ee;word-break:break-word;margin:7px 0">Общи карти: —</p>'+
+ '<p id="visionHero" style="font-size:16px;font-weight:700;color:#a8dcff;word-break:break-word;margin:7px 0">Моите карти: —</p>'+
+ '<p class="hint" id="visionOthers" style="margin:6px 0">Други открити карти: —</p>'+
+ '<p class="hint" id="visionSeats">Активни ръце: —</p>'+
  '<p class="fineprint">Снимките и видеокадрите не се изпращат. Оценката за броя активни играчи е по видимите покрити ръце, а не по всички места на масата. При скрити лични карти няма достатъчно информация за личен шанс.</p>';
  analysis.parentNode.insertBefore(section,analysis);
  // Keep the calculated probabilities directly below the camera/recognition area.
@@ -35,6 +39,8 @@
  document.head.appendChild(css);
  var file=document.getElementById('recognitionFile'),status=document.getElementById('visionStatus');
  var cardLine=document.getElementById('visionCards'),seatLine=document.getElementById('visionSeats');
+ var heroLine=document.getElementById('visionHero'),othersLine=document.getElementById('visionOthers'),stageLine=document.getElementById('visionStage');
+ var debugCanvas=document.getElementById('visionDebug');
  var contextCanvas=document.createElement('canvas'),ctx=contextCanvas.getContext('2d',{willReadFrequently:true});
  var lastSignature='',repeats=0,lastApplied='',frameWorking=false;
  var ownCodes=[],boardCodes=[],previousHeroWasAuto=false;
@@ -46,24 +52,48 @@
   e.value=String(value);e.dispatchEvent(new Event('change',{bubbles:true}));return true;
  }
  function emitText(result,confirmed){
-  var codes=result.board.map(function(c){return c.code?shown(c.code):'?';});
-  var personal=result.hero.map(function(c){return c.code?shown(c.code):'?';});
-  cardLine.textContent='Общи карти: '+(codes.join(' ')||'няма')+' | Долу: '+(personal.join(' ')||'няма');
-  seatLine.textContent='Видими покрити ръце: '+result.coveredHands+
-    ' · Открити карти: '+result.faceCount+
-    (confirmed?' · потвърдено':' · проверява се');
+  function list(cards){return cards.map(function(c){return c.code?shown(c.code):'?';}).join(' ')||'няма';}
+  cardLine.textContent='Общи карти (борд): '+list(result.board);
+  heroLine.textContent='Моите две карти: '+list(result.hero);
+  othersLine.textContent='Други открити карти (не се смесват с борда): '+list(result.others);
+  stageLine.textContent='Етап: '+result.stage+
+    (result.stageConfirmed?'':' · не е потвърден')+
+    ' · '+result.board.length+'/5 общи карти';
+  seatLine.textContent='Активни ръце по видимите карти: '+result.activePlayers+
+   ' (покрити двойки: '+result.coveredHands+', открита лична ръка: '+(result.hero.length===2?1:0)+')'+
+   (confirmed?' · стабилен кадър':' · проверява се');
   var unknown=result.visible.filter(function(c){return !c.code;}).length;
-  if(unknown)status.textContent='Има '+unknown+' неясни карти. Изчакай по-четлива картина; няма да ги отгатвам.';
-  else if(result.boardComplete)status.textContent='Разчетени са '+result.board.length+' общи карти. '+
-    (getField('hero0')&&getField('hero1')?'Анализът се обновява.':'Личните карти още не са известни.');
-  else if(result.faceCount)status.textContent='Открити карти: '+result.faceCount+'. За личен шанс са нужни твоите две открити карти.';
-  else status.textContent='Няма открити общи карти в този кадър.';
+  if(!result.uniqueCards)status.textContent='Повтаряща се карта между личната ръка и борда. Не обновявам анализа.';
+  else if(unknown)status.textContent='Нечетливи символи: '+unknown+'. Не попълвам непотвърдените карти.';
+  else if(!result.stageConfirmed)status.textContent='Не мога да потвърдя дали има общи карти. Нужна е по-ясна снимка.';
+  else if(result.boardComplete)status.textContent='Разчетен '+result.stage.toLowerCase()+' с '+result.board.length+' общи карти.'+
+    (getField('hero0')!==''&&getField('hero1')!==''?' Анализът може да се обнови.':' Личните карти още не са известни.');
+  else if(result.hero.length===2)status.textContent='Разпознати лични карти; '+result.stage.toLowerCase()+'.';
+  else status.textContent='Личните карти не са потвърдени; не гадая тяхната стойност.';
+ }
+ function drawDebug(img,frame,result){
+  var maxW=660,scale=Math.min(1,maxW/frame.width),w=Math.round(frame.width*scale),h=Math.round(frame.height*scale);
+  if(!w||!h)return;
+  debugCanvas.width=w;debugCanvas.height=h;debugCanvas.hidden=false;
+  var dc=debugCanvas.getContext('2d');dc.drawImage(img,0,0,w,h);
+  function mark(box,color,text){
+   dc.strokeStyle=color;dc.lineWidth=2.5;dc.strokeRect(box.x*scale,box.y*scale,box.width*scale,box.height*scale);
+   dc.font='bold 12px sans-serif';
+   var x=box.x*scale,y=Math.max(15,box.y*scale-3);
+   var mw=dc.measureText(text).width+8;
+   dc.fillStyle='rgba(5,13,20,.85)';dc.fillRect(x,y-13,mw,16);
+   dc.fillStyle=color;dc.fillText(text,x+4,y-1);
+  }
+  result.others.forEach(function(c){mark(c.box,'#b9b4c6','Друга');});
+  result.board.forEach(function(c){mark(c.box,'#79edab','Борд');});
+  result.hero.forEach(function(c){mark(c.box,'#85cbff','Моя');});
+  (result.backPairs||[]).forEach(function(pair){pair.forEach(function(b){mark(b,'#ffd483','Активен');});});
  }
  function applyResult(result){
   var changed=false;
   var board=result.board,hero=result.hero;
   // Only write complete, consistently recognized face-up groups.
-  if(board.length>=3&&board.length<=5&&board.every(function(c){return !!c.code;})){
+  if(result.uniqueCards&&result.boardComplete&&board.length>=3&&board.length<=5){
    var newBoard=board.map(function(c){return c.code;});
    if(newBoard.join('|')!==boardCodes.join('|')){
     for(var b=0;b<5;b++){
@@ -72,13 +102,13 @@
     }
     boardCodes=newBoard;
    }
-  } else if(board.length===0&&boardCodes.length){
+  } else if(result.stageConfirmed&&board.length===0&&result.others.length===0&&boardCodes.length){
    for(var q=0;q<5;q++)changed=changeField('board'+q,'')||changed;
    boardCodes=[];
   }
   // The bottom face-up pair is attributed to hero only if the user chooses that rule.
   var hasHero=hero.length===2&&hero.every(function(c){return !!c.code;});
-  if(document.getElementById('autoHero').checked&&hasHero){
+  if(result.uniqueCards&&document.getElementById('autoHero').checked&&hasHero){
    ownCodes=hero.map(function(c){return c.code;});
    changed=changeField('hero0',window.PokerMath.idFromCode(ownCodes[0]))||changed;
    changed=changeField('hero1',window.PokerMath.idFromCode(ownCodes[1]))||changed;
@@ -89,11 +119,13 @@
    changed=changeField('hero1','')||changed;
    previousHeroWasAuto=false;
   }
-  if(document.getElementById('autoPlayers').checked&&
-      getField('hero0')!==''&&getField('hero1')!==''&&result.coveredHands>0){
-   changed=changeField('players',Math.min(9,Math.max(2,result.coveredHands+1)))||changed;
+  // Only count known distinct visible pairs; never infer unseen occupied seats.
+  if(document.getElementById('autoPlayers').checked&&result.hero.length===2&&
+      getField('hero0')!==''&&getField('hero1')!==''&&result.activePlayers>=2){
+   changed=changeField('players',Math.min(9,result.activePlayers))||changed;
   }
-  if(changed&&getField('hero0')!==''&&getField('hero1')!==''&&
+  if(changed&&result.uniqueCards&&result.stageConfirmed&&
+     getField('hero0')!==''&&getField('hero1')!==''&&
      (board.length===0||result.boardComplete)){
     var run=document.getElementById('runAnalysis');
     if(run&&!run.disabled)run.click();
@@ -124,6 +156,7 @@
    try{
     // Keep original resolution when possible for reading small glyphs.
     var frame=canvasImage(img,true),result=inspect(frame,true);
+    drawDebug(img,frame,result);
     lastSignature='';repeats=0;lastApplied='';
     if(result.faceCount&&result.visible.every(function(c){return !!c.code;}))
        status.textContent='Снимката е обработена: '+result.faceCount+' четливи открити карти. '+(getField('hero0')!==''?'':'Личните карти не се виждат.');
@@ -140,7 +173,7 @@
    try{
     var startedAt=Date.now();
     var result=vision.analyze(canvasImage(video,false));
-    var signature=result.board.map(function(c){return c.code||'?';}).join('|')+','+
+    var signature=result.stage+','+result.board.map(function(c){return c.code||'?';}).join('|')+','+
        result.hero.map(function(c){return c.code||'?';}).join('|')+','+result.coveredHands;
     repeats=signature===lastSignature?repeats+1:1;
     lastSignature=signature;
