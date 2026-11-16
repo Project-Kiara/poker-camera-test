@@ -17,7 +17,7 @@
   }
   function label(id) {
     if (typeof id !== 'number' || id !== (id | 0) || id < 0 || id > 51) return '?';
-    return RANKS.charAt(id % 13) + SYMBOLS.charAt(Math.floor(id / 13));
+    return (RANKS.charAt(id % 13)==='T'?'10':RANKS.charAt(id % 13)) + SYMBOLS.charAt(Math.floor(id / 13));
   }
   function encode(category, a, b, c, d, e) {
     return (((((category * 15 + (a||0)) * 15 + (b||0)) * 15 + (c||0)) * 15 + (d||0)) * 15 + (e||0));
