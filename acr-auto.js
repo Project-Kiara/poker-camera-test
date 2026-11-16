@@ -26,7 +26,7 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r6 · OCR r8 · 16.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r6 · OCR r11 (лични карти и UI) · 17.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
   '<p class="hint"><a href="./ocr-selftest.html?v=r8">Тест на 52 синтетични карти</a> · <a href="./ocr-regression.html?v=r8">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r11">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
@@ -179,7 +179,7 @@
   result.hero.forEach(function(c){regions[c.box.x+','+c.box.y]='Лични';});
   result.others.forEach(function(c){regions[c.box.x+','+c.box.y]='Други';});
   var cards=result.visible.slice().sort(function(a,b){return a.box.y-b.box.y||a.box.x-b.box.x;});
-  var lines=['OCR версия: r8 | '+(vision.templateCoverage?'13 стойности и 4 бои са представени в образците':'проверка на образците недостъпна'),
+  var lines=['OCR версия: r11 | '+(vision.templateCoverage?'13 стойности и 4 бои са представени в образците':'проверка на образците недостъпна'),
     sourceInfo?'Източник: '+sourceInfo.originalWidth+'×'+sourceInfo.originalHeight+' → OCR: '+sourceInfo.ocrWidth+'×'+sourceInfo.ocrHeight+(sourceInfo.canonical?' (каноничен мащаб ACR)':' (общ мащаб)'):'Източник: видео кадър',
     'Открити правоъгълници: '+cards.length,
     'Игнорирани обекти от областта на бутоните: '+(result.ignoredUiBoxes||0),
