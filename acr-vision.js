@@ -36,10 +36,17 @@ function templates(){
  }
  return CACHE;
 }
-function glyphMask(img,box,part){
- var c=part==='rank'?[.09,.56,.06,.285]:[.07,.50,.315,.55];
- var x0=Math.max(0,Math.round(box.x+box.width*c[0])),x1=Math.min(img.width,Math.round(box.x+box.width*c[1]));
- var y0=Math.max(0,Math.round(box.y+box.height*c[2])),y1=Math.min(img.height,Math.round(box.y+box.height*c[3]));
+function glyphMask(img,box,part,variant){
+ // Try slightly different corner crops only when the standard crop is uncertain.
+ // All variants remain inside the rank/small-suit corner, never the big suit art.
+ var cuts=part==='rank'?
+  [[.09,.56,.06,.285],[.06,.58,.04,.305],[.11,.60,.045,.30]]:
+  [[.07,.50,.315,.55],[.055,.52,.295,.565],[.09,.53,.325,.575]];
+ var p=cuts[variant||0];
+ var x0=Math.max(0,Math.round(box.x+box.width*p[0])),
+     x1=Math.min(img.width,Math.round(box.x+box.width*p[1]));
+ var y0=Math.max(0,Math.round(box.y+box.height*p[2])),
+     y1=Math.min(img.height,Math.round(box.y+box.height*p[3]));
  var w=x1-x0,h=y1-y0;if(w<6||h<7)return null;
  var src=new Uint8Array(w*h),redCount=0,blackCount=0;
  for(var y=0;y<h;y++)for(var x=0;x<w;x++){
@@ -54,23 +61,51 @@ function matchSymbol(mask,kind){
  var refs=templates()[kind],byKey={},first=null,second=null;
  for(var i=0;i<refs.length;i++){
   var e=refs[i],score=similarity(mask,e.mask);
-  // The synthetic font references are hypotheses until validated with examples.
+  // Synthetic font references require more evidence than calibrated ACR glyphs.
   if(e.provenance==='font')score-=0.05;
   if(!byKey[e.key]||score>byKey[e.key].score)byKey[e.key]={key:e.key,score:score};
  }
  for(var k in byKey){var e=byKey[k];if(!first||e.score>first.score){second=first;first=e;}else if(!second||e.score>second.score)second=e;}
  return {first:first,second:second};
 }
+function selectGlyph(img,box,part){
+ var kind=part==='rank'?'rank':'suit',chosen=null;
+ for(var v=0;v<3;v++){
+  var pixels=glyphMask(img,box,part,v);
+  if(!pixels||!pixels.mask||pixels.count<10)continue;
+  var matched=matchSymbol(pixels.mask,kind);
+  if(!matched.first)continue;
+  var gap=matched.first.score-(matched.second?matched.second.score:0);
+  var accepted=matched.first.score>=(part==='rank'?.68:.71)&&
+       gap>=(part==='rank'?.043:.055);
+  var candidate={key:matched.first.key,score:matched.first.score,
+    margin:gap,accepted:accepted,isRed:pixels.isRed,variant:v};
+  // Do not replace a good first-crop reading. For uncertain ones,
+  // prefer a fully supported match with the strongest evidence.
+  if(v===0&&accepted)return candidate;
+  if(!chosen||(candidate.accepted&&!chosen.accepted)||
+     (candidate.accepted===chosen.accepted&&
+      candidate.score+Math.min(.15,candidate.margin)*.2>
+      chosen.score+Math.min(.15,chosen.margin)*.2))chosen=candidate;
+ }
+ return chosen;
+}
 function classify(img,box){
- var rank=glyphMask(img,box,'rank'),suit=glyphMask(img,box,'suit');
- if(!rank||!suit||!rank.mask||!suit.mask||rank.count<10||suit.count<10)return {box:box,code:null,reason:'Нечетлив символ'};
- var r=matchSymbol(rank.mask,'rank'),s=matchSymbol(suit.mask,'suit');
- if(!r.first||!s.first)return {box:box,code:null,reason:'Няма образец'};
- var rm=r.first.score-(r.second?r.second.score:0),sm=s.first.score-(s.second?s.second.score:0);
- var colorValid=rank.isRed===suit.isRed&&((s.first.key==='h'||s.first.key==='d')===suit.isRed);
- var good=r.first.score>=0.68&&rm>=0.043&&s.first.score>=0.71&&sm>=0.055&&colorValid;
- return {box:box,code:good?r.first.key+s.first.key:null,guess:r.first.key+s.first.key,
-   confidence:Math.round(100*Math.min(r.first.score,s.first.score)),reason:good?'':'Непотвърден символ'};
+ var rank=selectGlyph(img,box,'rank'),suit=selectGlyph(img,box,'suit');
+ if(!rank||!suit)return {box:box,code:null,rank:rank&&rank.accepted?rank.key:null,
+  suit:suit&&suit.accepted?suit.key:null,rankDetected:!!rank,suitDetected:!!suit,
+  reason:'Неясен символ в ъгъла на картата'};
+ var validColor=rank.isRed===suit.isRed&&((suit.key==='h'||suit.key==='d')===suit.isRed);
+ var rankOk=rank.accepted,suitOk=suit.accepted&&validColor;
+ var good=rankOk&&suitOk;
+ return {box:box,code:good?rank.key+suit.key:null,
+   rank:rankOk?rank.key:null,suit:suitOk?suit.key:null,
+   rankDetected:!!rank,suitDetected:!!suit,
+   rankScore:Math.round(rank.score*100),suitScore:Math.round(suit.score*100),
+   rankMargin:Math.round(rank.margin*100),suitMargin:Math.round(suit.margin*100),
+   guess:rank.key+suit.key,confidence:Math.round(100*Math.min(rank.score,suit.score)),
+   reason:good?'':!validColor?'Несъответствие между цвят и боя':
+    !rankOk&&!suitOk?'Непотвърдени стойност и боя':!rankOk?'Непотвърдена стойност':'Непотвърдена боя'};
 }
 function detectBurgundyPairs(img){
  var w=img.width,h=img.height,d=img.data,n=w*h,binary=new Uint8Array(n),visited=new Uint8Array(n),queue=new Int32Array(n);
