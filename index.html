@@ -271,7 +271,7 @@
     })();
   </script>
 
-  <script src="./poker-engine.js?v=ui-compact-20261116-r6-ten"></script>
+  <script src="./poker-engine.js?v=ocr-engine10-20261116-r7"></script>
   <script>
   (function () {
     'use strict';
@@ -286,7 +286,7 @@
     var lose = document.getElementById('loseValue');
     var tie = document.getElementById('tieValue');
     var generation = 0;
-    var rankList = '23456789TJQKA';
+    var rankList = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
     var suitList = 'cdhs';
     var symbols = '♣♦♥♠';
 
@@ -300,7 +300,7 @@
         for (var r = 0; r < 13; r++) {
           var option = document.createElement('option');
           option.value = s * 13 + r;
-          option.textContent = (rankList.charAt(r)==='T'?'10':rankList.charAt(r)) + symbols.charAt(s);
+          option.textContent = rankList[r] + symbols.charAt(s);
           select.appendChild(option);
         }
       }
@@ -442,8 +442,8 @@
     });
   }());
   </script>
-<script src="./card-detector.js?v=ui-compact-20261116-r6-ten"></script>
-  <script src="./acr-vision.js?v=ui-compact-20261116-r6-ten"></script>
-  <script src="./acr-auto.js?v=ui-compact-20261116-r6-ten"></script>
+<script src="./card-detector.js?v=ocr-engine10-20261116-r7"></script>
+  <script src="./acr-vision.js?v=ocr-engine10-20261116-r7"></script>
+  <script src="./acr-auto.js?v=ocr-engine10-20261116-r7"></script>
 </body>
 </html>
