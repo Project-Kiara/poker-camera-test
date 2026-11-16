@@ -170,8 +170,27 @@ function analyze(img){
  var board=groups.board,hero=groups.hero;
  var combined=board.concat(hero).filter(function(c){return !!c.code;}).map(function(c){return c.code;});
  var noDuplicates=(new Set(combined)).size===combined.length;
+ // A visible face-up bottom pair and covered hands each represent a distinct
+ // seat only when their locations differ. Back pairs are otherwise anonymous.
+ var otherBacks=backs.filter(function(pair){
+  if(!hero.length)return true;
+  var bx=(pair[0].x+pair[1].x+pair[1].width)/2;
+  var by=(pair[0].y+pair[1].y+pair[1].height)/2;
+  var hx=(hero[0].box.x+hero[1].box.x+hero[1].box.width)/2;
+  var hy=(hero[0].box.y+hero[1].box.y+hero[1].box.height)/2;
+  return Math.abs(bx-hx)>img.width*.09||Math.abs(by-hy)>img.height*.10;
+ });
+ var stage=board.length===3?'Флоп':board.length===4?'Търн':board.length===5?'Ривър':null;
+ var possibleBoard=groups.others.some(function(card){
+  var x=(card.box.x+card.box.width/2)/img.width;
+  var y=(card.box.y+card.box.height/2)/img.height;
+  return x>.25&&x<.75&&y>.20&&y<.72;
+ });
  return {visible:face,board:board,hero:hero,others:groups.others,
-  faceCount:face.length,coveredHands:backs.length,
+  faceCount:face.length,coveredHands:otherBacks.length,backPairs:otherBacks,
+  activePlayers:otherBacks.length+(hero.length===2?1:0),
+  stage:stage||(possibleBoard?'Неясен етап':'Префлоп'),
+  stageConfirmed:!!stage||(!board.length&&!possibleBoard),
   boardComplete:board.length>=3&&board.every(function(c){return !!c.code;})&&noDuplicates,
   uniqueCards:noDuplicates};
 }
