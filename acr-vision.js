@@ -174,21 +174,22 @@ function selectGlyph(img,box,part){
  }
  return chosen;
 }
+function publicRank(value){return value==='T'?'10':value;}
 function classify(img,box){
  var rank=selectGlyph(img,box,'rank'),suit=selectGlyph(img,box,'suit');
- if(!rank||!suit)return {box:box,code:null,rank:rank&&rank.accepted?rank.key:null,
+ if(!rank||!suit)return {box:box,code:null,rank:rank&&rank.accepted?publicRank(rank.key):null,
   suit:suit&&suit.accepted?suit.key:null,rankDetected:!!rank,suitDetected:!!suit,
   reason:'Неясен символ в ъгъла на картата'};
  var validColor=rank.isRed===suit.isRed&&((suit.key==='h'||suit.key==='d')===suit.isRed);
  var rankOk=rank.accepted,suitOk=suit.accepted&&validColor;
  var good=rankOk&&suitOk;
- return {box:box,code:good?rank.key+suit.key:null,
-   rank:rankOk?rank.key:null,suit:suitOk?suit.key:null,
+ return {box:box,code:good?publicRank(rank.key)+suit.key:null,
+   rank:rankOk?publicRank(rank.key):null,suit:suitOk?suit.key:null,
    rankDetected:!!rank,suitDetected:!!suit,
    rankScore:Math.round(rank.score*100),suitScore:Math.round(suit.score*100),
    rankMargin:Math.round(rank.margin*100),suitMargin:Math.round(suit.margin*100),
    rankSource:rank.source||'unknown',suitSource:suit.source||'unknown',
-   guess:rank.key+suit.key,confidence:Math.round(100*Math.min(rank.score,suit.score)),
+   guess:publicRank(rank.key)+suit.key,confidence:Math.round(100*Math.min(rank.score,suit.score)),
    reason:good?'':!validColor?'Несъответствие между цвят и боя':
     !rankOk&&!suitOk?'Непотвърдени стойност и боя':!rankOk?'Непотвърдена стойност':'Непотвърдена боя'};
 }
