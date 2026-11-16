@@ -17,8 +17,8 @@ table{border-collapse:collapse;width:100%;font-size:14px;margin-top:16px}th,td{b
 <p id="summary" role="status">Тестът още не е стартиран.</p>
 <table><thead><tr><th>Очаквана</th><th>Разчетена</th><th>Резултат</th><th>Диагностика</th></tr></thead><tbody id="results"></tbody></table>
 <p class="hint"><a href="./">Назад към приложението</a>. Изпращане на изображения към сървър няма.</p>
-<script src="./card-detector.js?v=ocr-all52-r5a"></script>
-<script src="./acr-vision.js?v=ocr-all52-r5a"></script>
+<script src="./card-detector.js?v=ocr-all52-r6-ten"></script>
+<script src="./acr-vision.js?v=ocr-all52-r6-ten"></script>
 <script>
 (function(){
 'use strict';
@@ -44,10 +44,10 @@ document.getElementById('run').addEventListener('click',function(){
  tbody.textContent='';
  var passed=0,failed=0;
  for(var i=0;i<ranks.length;i++)for(var j=0;j<suits.length;j++){
-  var expect=ranks[i]+suits[j],result=simulate(ranks[i],suits[j]);
+  var expect=(ranks[i]==='T'?'10':ranks[i])+suits[j],result=simulate(ranks[i],suits[j]);
   var ok=result.code===expect;if(ok)passed++;else failed++;
   var row=document.createElement('tr');
-  [ranks[i]+symbols[j],result.code?result.code:'?',ok?'Преминат':'Неуспешен',
+  [(ranks[i]==='T'?'10':ranks[i])+symbols[j],result.code?result.code:'?',ok?'Преминат':'Неуспешен',
   (result.reason||'')+' [стойност '+(result.rankScore==null?'—':result.rankScore)+'% / '+(result.rankSource||'—')+'; боя '+(result.suitScore==null?'—':result.suitScore)+'% / '+(result.suitSource||'—')+']'].forEach(function(x,k){
    var cell=document.createElement('td');cell.textContent=x;
    if(k===2)cell.className=ok?'ok':'fail';
