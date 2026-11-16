@@ -102,7 +102,23 @@ document.getElementById('run').addEventListener('click',function(){
   checkGlyph('Каро Q♦ не се бърка с купа','suit','d',
     '00000000000000ff8001ffc003ffe003fff007fff80ffffc1ffffc3ffffc3ffffc1ffffc0ffff807fff003ffe000ffc000ff80007f00007f00003e00001e00000000000000000000'),
   checkGlyph('Купа K♥ не се бърка с каро','suit','h',
-    '0000000000000000003ffffc3ffffc3ffffc3ffffc3ffffc3ffffc1ffff80ffff807fff007fff003ffe001ffc000ff8000ff80007f00003e00001c00000000000000000000000000')
+    '0000000000000000003ffffc3ffffc3ffffc3ffffc3ffffc3ffffc1ffff80ffff807fff007fff003ffe001ffc000ff8000ff80007f00003e00001c00000000000000000000000000'),
+  checkGlyph('Борд 7♦: съвпада със съществуващите рангови образци','rank','7',
+    '00000000000007ffe007ffe007ffe007ffe00003e00007c00007c0000f80000f00001f00001e00003e00007c00007c00007c0000780000f80000f80000f80001f800000000000000'),
+  checkGlyph('Борд A♦: разчита асо','rank','A',
+    '000000000000001e00003e00007f00007f00007f00007f8000ff8000ffc001f7c001f7c003e3e003e3e003e3f007fff007fff007fff80ffff80f80f81f80f81f8078000000000000'),
+  checkGlyph('Борд Q♠: разчита дамата','rank','Q',
+    '00000000000000fe0001ff8007ffc007e7e00f81f01f01f01f00f01e00701e00701e00701e00701e00701e00f01f02f01f07f00f83f00fc3e007fff003fff000ff70000000000000'),
+  checkGlyph('Борд Q♣: разчита втората дама','rank','Q',
+    '000000000000007f0001ffc003ffe007e3f00781f00f80f80f00781f00781f00781f00381f00781f00781f00781f02780f87f80f83f807e3f003fff801fff8007fb8000000000000'),
+  checkGlyph('Борд 7♦: боя каро без ново напасване','suit','d',
+    '000000000000003c00007e00007e00007f0000ff0003ffc003ffe007fff00ffff81ffff80ffff80ffff007ffe003ffc001ff80007f00007e00007e00003e00001c00000000000000'),
+  checkGlyph('Борд A♦: втори образец на боя каро','suit','d',
+    '000000000000001c00003e00003f00007f0000ff8001ffc003ffe007fff007fff80ffff80ffff807fff003ffe001ffc000ff8000ff80007f00003e00001c00000800000000000000'),
+  checkGlyph('Борд Q♠: правилно чете пика','suit','s',
+    '000000000000003c00007e0000ff0001ff8003ffc007fff01ffff83ffff83ffff83ffff83ffff81ffff81ffff80fcdf8000c00001c00001c00001c00003e00003e00000000000000'),
+  checkGlyph('Борд Q♣: втори образец на спатия','suit','c',
+    '00000000000001ff0001ff8001ff8001ff8001ff8001ff8007fff01ffff83ffff83ffff83ffff83ffff83ffff81ffff80ffff0001800001800001800003c00003c00000000000000')
  ];
  var list=document.getElementById('results');list.textContent='';
  tests.forEach(function(t){var li=document.createElement('li');li.className=t.pass?'yes':'no';
