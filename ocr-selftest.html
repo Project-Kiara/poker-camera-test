@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="bg">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ACR OCR — тест на 52 карти</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}body{max-width:850px;margin:auto;padding:18px;background:#101927;color:#eef5fc}
+h1{font-size:1.35rem}p{line-height:1.5;color:#c0d2e5}button{padding:12px 18px;border:0;border-radius:9px;background:#35bd95;color:#051b16;font-weight:700}
+table{border-collapse:collapse;width:100%;font-size:14px;margin-top:16px}th,td{border-bottom:1px solid #40516a;padding:7px;text-align:left}
+.fail{color:#ff9e9e}.ok{color:#98efca}.hint{font-size:13px}
+</style>
+</head>
+<body>
+<h1>Технически тест — 52 покер карти (r5)</h1>
+<p>Тестът рисува 13 стойности × 4 бои върху синтетични карти и проверява разчитането им. Той НЕ удостоверява точност на всички 52 карти в реални ACR кадри.</p>
+<p id="bank">Проверявам наличните образци…</p>
+<button id="run">Пусни теста на 52 карти</button>
+<p id="summary" role="status">Тестът още не е стартиран.</p>
+<table><thead><tr><th>Очаквана</th><th>Разчетена</th><th>Резултат</th><th>Диагностика</th></tr></thead><tbody id="results"></tbody></table>
+<p class="hint"><a href="./">Назад към приложението</a>. Изпращане на изображения към сървър няма.</p>
+<script src="./card-detector.js?v=ocr-all52-r5"></script>
+<script src="./acr-vision.js?v=ocr-all52-r5"></script>
+<script>
+(function(){
+'use strict';
+var ranks='23456789TJQKA',suits='cdhs',symbols='♣♦♥♠';
+var bank=document.getElementById('bank'),summary=document.getElementById('summary'),tbody=document.getElementById('results');
+if(!window.ACRVision){bank.textContent='Грешка: OCR скриптът не се зареди.';return;}
+var coverage=window.ACRVision.templateCoverage();
+bank.textContent='Налични прототипи: '+coverage.ranks+'/13 стойности, '+coverage.suits+'/4 бои, '+coverage.combinations+'/52 комбинации. ACR-калибрирани образци: '+coverage.calibratedRanks+'/13 стойности и '+coverage.calibratedSuits+'/4 бои.';
+function simulate(rank,suit){
+ var c=document.createElement('canvas');c.width=180;c.height=235;
+ var g=c.getContext('2d',{willReadFrequently:true}),box={x:40,y:40,width:88,height:136};
+ g.fillStyle='#103b2c';g.fillRect(0,0,c.width,c.height);
+ g.fillStyle='#fff';g.fillRect(box.x,box.y,box.width,box.height);
+ g.fillStyle=suit==='h'||suit==='d'?'#bc2028':'#141414';
+ g.textBaseline='alphabetic';
+ g.font='700 '+(rank==='T'?'25':'29')+'px Arial';
+ g.fillText(rank==='T'?'10':rank,box.x+9,box.y+31);
+ g.font='700 28px Georgia';
+ g.fillText(symbols.charAt(suits.indexOf(suit)),box.x+9,box.y+67);
+ return window.ACRVision.classify(g.getImageData(0,0,c.width,c.height),box);
+}
+document.getElementById('run').addEventListener('click',function(){
+ tbody.textContent='';
+ var passed=0,failed=0;
+ for(var i=0;i<ranks.length;i++)for(var j=0;j<suits.length;j++){
+  var expect=ranks[i]+suits[j],result=simulate(ranks[i],suits[j]);
+  var ok=result.code===expect;if(ok)passed++;else failed++;
+  var row=document.createElement('tr');
+  [ranks[i]+symbols[j],result.code?result.code:'?',ok?'Преминат':'Неуспешен',
+  (result.reason||'')+' [стойност '+(result.rankScore==null?'—':result.rankScore)+'%; боя '+(result.suitScore==null?'—':result.suitScore)+'%]'].forEach(function(x,k){
+   var cell=document.createElement('td');cell.textContent=x;
+   if(k===2)cell.className=ok?'ok':'fail';
+   row.appendChild(cell);
+  });
+  tbody.appendChild(row);
+ }
+ summary.textContent='Синтетичен тест: '+passed+'/52 успешни; '+failed+' неуспешни. Тестът е само за изкуствено нарисувани карти.';
+});
+}());
+</script>
+</body></html>
