@@ -82,6 +82,7 @@
  var memoryLine=document.getElementById('dealMemoryLine');
  var memoryA=document.getElementById('memoryCardA'),memoryB=document.getElementById('memoryCardB');
  var memoryStatus=document.getElementById('memoryActionStatus');
+ var memoryOptionsSignature='';
  var suitSymbols={c:'♣',d:'♦',h:'♥',s:'♠'};
  function shown(code){return code?code.slice(0,-1)+suitSymbols[code.slice(-1)]:'?';}
  function notifyMemory(){document.dispatchEvent(new Event('poker:deal-changed'));}
@@ -107,7 +108,11 @@
   memoryLine.textContent='Раздаване '+snap.hand+' · видени '+snap.seen.length+
    ' карти · фолд '+snap.dead.length+' · известни чужди ръце '+snap.knownOpponents.length+
    (snap.resetPending?' · ново раздаване? '+snap.resetPending+'/3':'');
-  selectMemoryOptions(memoryA,available);selectMemoryOptions(memoryB,available);
+  var signature=available.join('|');
+  if(memoryOptionsSignature!==signature){
+   selectMemoryOptions(memoryA,available);selectMemoryOptions(memoryB,available);
+   memoryOptionsSignature=signature;
+  }
  }
  function refreshMath(){
   notifyMemory();
@@ -137,6 +142,11 @@
  });
  function ingestMemory(result){
   var update=bridge.observe(result);
+  if(result.stageConfirmed!==true||result.uniqueCards!==true){
+   clearAutoInputs();renderMemory(update.state);
+   status.textContent='Непотвърдено разпознаване — изчисленията са спрени.';
+   return false;
+  }
   if(update.handChanged){
    clearAutoInputs();
    memoryStatus.textContent='Ново раздаване е потвърдено; паметта е нулирана.';
