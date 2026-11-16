@@ -1,0 +1,150 @@
+/* Texas Hold'em probability simulation.
+   Local Monte Carlo. Opponents have uniformly random unknown hands.
+   No network and no use of camera images. */
+(function (root) {
+  'use strict';
+  var RANKS = '23456789TJQKA', SUITS = 'cdhs', SYMBOLS = '♣♦♥♠';
+  var HAND_NAMES = ['Висока карта','Чифт','Два чифта','Тройка','Стрейт','Флъш','Фул хаус','Каре','Стрейт флъш'];
+
+  function idFromCode(code) {
+    if (typeof code !== 'string') return -1;
+    var value = code.trim().replace(/^10/i,'T');
+    if (value.length !== 2) return -1;
+    var rank = RANKS.indexOf(value.charAt(0).toUpperCase());
+    var suit = SUITS.indexOf(value.charAt(1).toLowerCase());
+    if (suit < 0) suit = SYMBOLS.indexOf(value.charAt(1));
+    return rank < 0 || suit < 0 ? -1 : suit * 13 + rank;
+  }
+  function label(id) {
+    if (typeof id !== 'number' || id !== (id | 0) || id < 0 || id > 51) return '?';
+    return RANKS.charAt(id % 13) + SYMBOLS.charAt(Math.floor(id / 13));
+  }
+  function encode(category, a, b, c, d, e) {
+    return (((((category * 15 + (a||0)) * 15 + (b||0)) * 15 + (c||0)) * 15 + (d||0)) * 15 + (e||0));
+  }
+  function straight(mask) {
+    for (var high = 14; high >= 6; high--) {
+      if ((mask & (31 << (high - 4))) === (31 << (high - 4))) return high;
+    }
+    if ((mask & (1 << 14)) && ((mask & (15 << 2)) === (15 << 2))) return 5;
+    return 0;
+  }
+  /* Lexicographically ranked best 5-card hand among seven cards. */
+  function evaluate(seven) {
+    if (!seven || seven.length !== 7) throw new Error('Оценката изисква 7 карти.');
+    var ranks = [], suits = [0,0,0,0], masks = [0,0,0,0], all = 0, i;
+    for (i = 0; i <= 14; i++) ranks.push(0);
+    for (i = 0; i < 7; i++) {
+      var id = seven[i];
+      if (!Number.isInteger(id) || id < 0 || id > 51) throw new Error('Невалидна карта.');
+      var rank = id % 13 + 2, suit = Math.floor(id / 13);
+      ranks[rank]++; suits[suit]++; masks[suit] |= 1 << rank; all |= 1 << rank;
+    }
+    var flush = -1;
+    for (i = 0; i < 4; i++) if (suits[i] >= 5) flush = i;
+    if (flush >= 0) {
+      var sflush = straight(masks[flush]);
+      if (sflush) return encode(8, sflush);
+    }
+    for (i = 14; i >= 2; i--) if (ranks[i] === 4) {
+      for (var j = 14; j >= 2; j--) if (j !== i && ranks[j]) return encode(7, i, j);
+    }
+    var three = 0, fullPair = 0;
+    for (i = 14; i >= 2; i--) if (ranks[i] >= 3 && !three) three = i;
+    if (three) for (i = 14; i >= 2; i--) if (i !== three && ranks[i] >= 2) {fullPair = i; break;}
+    if (three && fullPair) return encode(6, three, fullPair);
+    if (flush >= 0) {
+      var f = [];
+      for (i = 14; i >= 2; i--) if (masks[flush] & (1 << i)) f.push(i);
+      return encode(5, f[0], f[1], f[2], f[3], f[4]);
+    }
+    var st = straight(all);
+    if (st) return encode(4, st);
+    if (three) {
+      var t = [];
+      for (i = 14; i >= 2; i--) if (i !== three && ranks[i]) t.push(i);
+      return encode(3, three, t[0], t[1]);
+    }
+    var pairs = [];
+    for (i = 14; i >= 2; i--) if (ranks[i] >= 2) pairs.push(i);
+    if (pairs.length >= 2) {
+      for (i = 14; i >= 2; i--) if (i !== pairs[0] && i !== pairs[1] && ranks[i]) {
+        return encode(2, pairs[0], pairs[1], i);
+      }
+    }
+    if (pairs.length) {
+      var p = [];
+      for (i = 14; i >= 2; i--) if (i !== pairs[0] && ranks[i]) p.push(i);
+      return encode(1, pairs[0], p[0], p[1], p[2]);
+    }
+    var h = [];
+    for (i = 14; i >= 2; i--) if (ranks[i]) h.push(i);
+    return encode(0, h[0], h[1], h[2], h[3], h[4]);
+  }
+  function category(score) { return Math.floor(score / 759375); } // 15^5
+  function simulator(input) {
+    var hero = input.hero || [], board = input.board || [], dead = input.dead || [];
+    var players = input.players, iterations = input.iterations || 2000;
+    if (hero.length !== 2) throw new Error('Посочи и двете лични карти.');
+    if ([0,3,4,5].indexOf(board.length) < 0) throw new Error('Общите карти трябва да са 0, 3, 4 или 5.');
+    if (!Number.isInteger(players) || players < 2 || players > 9) throw new Error('Избери 2–9 активни играчи, включително теб.');
+    if (!Number.isInteger(iterations) || iterations < 100 || iterations > 20000) throw new Error('Невалиден брой симулации.');
+    var known = hero.concat(board,dead), seen = {}, deck = [], i;
+    for (i = 0; i < known.length; i++) {
+      var id = known[i];
+      if (!Number.isInteger(id) || id < 0 || id > 51) throw new Error('Невалидна карта.');
+      if (seen[id]) throw new Error('Картата ' + label(id) + ' е въведена два пъти.');
+      seen[id] = true;
+    }
+    for (i = 0; i < 52; i++) if (!seen[i]) deck.push(i);
+    var remainingBoard = 5 - board.length, opponents = players - 1;
+    var draws = remainingBoard + opponents * 2;
+    if (draws > deck.length) throw new Error('Недостатъчно останали карти за този брой играчи.');
+    var count = 0, wins = 0, losses = 0, ties = 0, share = 0;
+    var categories = [0,0,0,0,0,0,0,0,0];
+    // One simulation compares the hero hand with every active opponent.
+    function runOne() {
+      var pool = deck.slice(), i;
+      for (i = 0; i < draws; i++) {
+        var j = i + Math.floor(Math.random() * (pool.length - i));
+        var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+      }
+      var finalBoard = board.slice();
+      for (i = 0; i < remainingBoard; i++) finalBoard.push(pool[i]);
+      var own = evaluate(hero.concat(finalBoard));
+      categories[category(own)]++;
+      var best = own, winnerCount = 1, position = remainingBoard;
+      for (i = 0; i < opponents; i++) {
+        var other = evaluate([pool[position++], pool[position++]].concat(finalBoard));
+        if (other > best) { best = other; winnerCount = 1; }
+        else if (other === best) winnerCount++;
+      }
+      if (own < best) losses++;
+      else if (winnerCount > 1) { ties++; share += 1 / winnerCount; }
+      else { wins++; share++; }
+      count++;
+    }
+    function result() {
+      var denom = count || 1;
+      return {
+        done: count, total: iterations, players: players,
+        win: 100 * wins / denom, loss: 100 * losses / denom,
+        tie: 100 * ties / denom, equity: 100 * share / denom,
+        categories: categories.map(function (n) {return 100 * n / denom;}),
+        names: HAND_NAMES.slice()
+      };
+    }
+    return {
+      batch: function (size) {
+        var end = Math.min(iterations, count + size);
+        while (count < end) runOne();
+        return count >= iterations;
+      },
+      result: result
+    };
+  }
+  root.PokerMath = {
+    idFromCode:idFromCode, label:label, evaluate:evaluate, category:category,
+    simulator:simulator, handNames:HAND_NAMES.slice()
+  };
+}(typeof window !== 'undefined' ? window : self));
