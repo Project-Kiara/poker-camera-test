@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Покер анализатор — тестове за раздаване и математика</title>
+<style>body{max-width:780px;margin:24px auto;padding:0 16px;background:#101927;color:#e9f3ff;font:15px/1.5 system-ui}p{color:#b9cce0}button{padding:12px 18px;background:#61ddb3;border:0;border-radius:9px;font-weight:700}li{margin:6px 0;padding:7px;border-bottom:1px solid #34455e}.pass{color:#7af0b8}.fail{color:#ff9ea9}a{color:#a2d9ff}</style></head>
+<body><h1>Тестове за паметта на картите и вероятностите</h1>
+<p>Изпълнява 27 автоматизирани проверки в браузъра. Това не доказва, че OCR разпознава без грешка реални снимки.</p>
+<button id="run">Пусни всички тестове</button><p id="summary" role="status">Тестовете не са стартирани.</p><ol id="results"></ol>
+<p><a href="./">Към приложението</a> · <a href="./ocr-regression.html">OCR диагностика</a></p>
+<script src="./poker-engine.js?v=deal-tests-20261116"></script><script src="./hand-tracker.js?v=deal-tests-20261116"></script><script>
+
+function runAll(){
+ const tracker=window.PokerHandTracker,math=window.PokerMath,list=[];
+ function check(label,ok){list.push({label:label,pass:!!ok});}
+ function c(codes){return codes.map(function(code){return {code:code};});}
+ function frame(stage,board,hero,others){return {stage:stage,board:c(board),hero:c(hero),others:c(others),stageConfirmed:true,uniqueCards:true};}
+ function cards(s){return s.split(' ').map(math.idFromCode);}
+ function sample(opts){opts.iterations=200;var s=math.simulator(opts);s.batch(200);return s.result();}
+ function rejects(fn){try{fn();return false;}catch(e){return true;}}
+ const river=frame('Ривър',['5s','4c','10d','8c','10h'],['Ac','8h'],['Ks','Kd']);
+ const next=frame('Префлоп',[],['Qd','Qc'],[]);
+ const same=frame('Префлоп',[],['Ac','8h'],[]);
+ const t=tracker.createTracker();
+ let s=t.observe(river);
+ check('Първо раздаване: девет видени карти',s.hand===1&&s.seen.length===9);
+ check('Чуждите карти не се считат за фолд',s.revealedOther.length===2&&s.dead.length===0);
+ check('Не се приема шоудаун по подразбиране',s.knownOpponents.length===0);
+ s=t.confirmOpponent(['Ks','Kd'],'showdown');
+ check('Потвърден шоудаун: разкрита чужда ръка',s.knownOpponents.length===1&&s.dead.length===0);
+ check('Конфликт фолд/шоудаун е отказан',rejects(function(){t.confirmOpponent(['Ks','Kd'],'folded');}));
+ s=t.observe({...next,stageConfirmed:false});
+ check('Непотвърден кадър не нулира',s.hand===1&&s.resetPending===0);
+ s=t.observe(same);
+ check('Същите лични карти не нулират',s.hand===1);
+ s=t.observe(next);
+ check('Първи нов кадър: още старо раздаване',s.hand===1&&s.resetPending===1&&!s.seen.includes('Qd'));
+ s=t.observe(next);
+ check('Втори кадър: нови карти не замърсяват старото',s.hand===1&&s.resetPending===2&&!s.seen.includes('Qc'));
+ s=t.observe(next);
+ check('Трети кадър: ново раздаване и чиста памет',s.hand===2&&s.seen.length===2&&s.knownOpponents.length===0);
+ s=t.observe(river);
+ check('Чужда лична ръка на ривъра не се приема',s.hand===2&&s.seen.length===2);
+ s=t.observe(frame('Ривър',['5s','4c','10d','8c','10h'],['Qd','Qc'],['Ks','Kd']));
+ check('Старите стойности могат да се появят в ново раздаване',s.hand===2&&s.seen.length===9);
+ check('Обща карта не може да е фолднала чужда',rejects(function(){t.confirmOpponent(['10d','Ks'],'folded');}));
+ s=t.confirmOpponent(['Ks','Kd'],'folded');
+ check('Фолдналите карти се пазят отделно',s.dead.length===2&&s.knownOpponents.length===0);
+ check('Не може фолднала ръка да е шоудаун',rejects(function(){t.confirmOpponent(['Ks','Kd'],'showdown');}));
+ s=t.startNextHand();
+ check('Ръчно потвърждение за ново раздаване нулира',s.hand===3&&s.seen.length===0&&s.dead.length===0);
+ const b=tracker.createTracker(),p1=frame('Префлоп',[],['As','2h'],[]),p2=frame('Префлоп',[],['3d','4s'],[]);
+ b.observe(p1);b.observe(p2);b.observe(p2);s=b.observe(p2);
+ check('Фолд преди флоп също позволява ново раздаване',s.hand===2&&s.seen.length===2);
+ const k=tracker.createTracker();
+ k.observe(river);k.observe(next);s=k.observe(frame('Префлоп',[],[],[]));
+ check('Изгубен кадър отменя кандидата за смяна',s.resetPending===0&&s.hand===1);
+ s=k.observe(next);
+ check('Броенето започва отново',s.resetPending===1);
+ s=k.observe({...next,uniqueCards:false});
+ check('Невалиден кадър не увеличава брояча',s.resetPending===1);
+ s=k.observe(same);
+ check('Старата ръка отменя съмнителната смяна',s.resetPending===0&&s.hand===1);
+ const base={hero:cards('Ac Ad'),board:cards('2c 3d 4h 9s Js'),players:2};
+ let r=sample({...base,knownOpponents:[cards('Kc Kd')]});
+ check('Точно известен по-слаб противник: 100% печалба',r.win===100&&r.loss===0&&r.knownOpponents===1);
+ r=sample({...base,knownOpponents:[cards('2h 2s')]});
+ check('Точно известен по-силен противник: 100% загуба',r.win===0&&r.loss===100);
+ r=sample({hero:cards('2c 3d'),board:cards('As Ks Qs Js 10s'),players:2,knownOpponents:[cards('4c 5d')]});
+ check('Общ роял флъш: 100% равенство и 50% еквити',r.tie===100&&r.equity===50);
+ check('Дублирана известна карта се отхвърля',rejects(function(){sample({...base,knownOpponents:[cards('Ac Kc')]});}));
+ check('Твърде много разкрити чужди ръце се отхвърлят',rejects(function(){sample({...base,knownOpponents:[cards('Kc Kd'),cards('Qc Qd')]});}));
+ r=sample({...base,players:3,knownOpponents:[cards('Kc Kd')]});
+ check('Смесени известни и неизвестни противници',r.done===200&&Math.abs(r.win+r.loss+r.tie-100)<1e-8);
+ return {passed:list.filter(function(x){return x.pass;}).length,total:list.length,tests:list};
+}
+
+document.getElementById('run').addEventListener('click',function(){
+ var result=runAll(),out=document.getElementById('results');out.textContent='';
+ result.tests.forEach(function(test){
+  var li=document.createElement('li');li.className=test.pass?'pass':'fail';
+  li.textContent=(test.pass?'✓ ':'✗ ')+test.label;out.appendChild(li);
+ });
+ document.getElementById('summary').textContent=result.passed+'/'+result.total+
+  ' преминати, '+(result.total-result.passed)+' неуспешни.';
+});
+</script></body></html>
