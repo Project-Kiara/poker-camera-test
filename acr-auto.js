@@ -8,7 +8,7 @@
  section.className='panel';section.id='autoRecognition';
  section.innerHTML=
  '<h2>Автоматично разпознаване · ACR Poker</h2>'+
- '<p class="hint" id="ocrVersion">OCR диагностика · 16.11.2026 · r3</p>'+
+ '<p class="hint" id="ocrVersion">OCR диагностика · 16.11.2026 · r4</p>'+
  '<p class="hint">Пробен режим: разчитане на видимите карти от камерата или от снимка. Неразпознатите карти не се отгатват.</p>'+
  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">'+
  '<label style="margin:0"><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>'+
