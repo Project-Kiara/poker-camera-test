@@ -10,19 +10,20 @@ table{border-collapse:collapse;width:100%;font-size:14px;margin-top:16px}th,td{b
 </style>
 </head>
 <body>
-<h1>Технически тест — 52 покер карти (r5)</h1>
+<h1>Технически тест — 52 покер карти (OCR r7)</h1>
 <p>Тестът рисува 13 стойности × 4 бои върху синтетични карти и проверява разчитането им. Той НЕ удостоверява точност на всички 52 карти в реални ACR кадри.</p>
 <p id="bank">Проверявам наличните образци…</p>
 <button id="run">Пусни теста на 52 карти</button>
 <p id="summary" role="status">Тестът още не е стартиран.</p>
 <table><thead><tr><th>Очаквана</th><th>Разчетена</th><th>Резултат</th><th>Диагностика</th></tr></thead><tbody id="results"></tbody></table>
 <p class="hint"><a href="./">Назад към приложението</a>. Изпращане на изображения към сървър няма.</p>
-<script src="./card-detector.js?v=ocr-all52-r6-ten"></script>
-<script src="./acr-vision.js?v=ocr-all52-r6-ten"></script>
+<script src="./poker-engine.js?v=ocr-engine10-r7"></script>
+<script src="./card-detector.js?v=ocr-engine10-r7"></script>
+<script src="./acr-vision.js?v=ocr-engine10-r7"></script>
 <script>
 (function(){
 'use strict';
-var ranks='23456789TJQKA',suits='cdhs',symbols='♣♦♥♠';
+var ranks=['2','3','4','5','6','7','8','9','10','J','Q','K','A'],suits='cdhs',symbols='♣♦♥♠';
 var bank=document.getElementById('bank'),summary=document.getElementById('summary'),tbody=document.getElementById('results');
 if(!window.ACRVision){bank.textContent='Грешка: OCR скриптът не се зареди.';return;}
 var coverage=window.ACRVision.templateCoverage();
@@ -34,8 +35,8 @@ function simulate(rank,suit){
  g.fillStyle='#fff';g.fillRect(box.x,box.y,box.width,box.height);
  g.fillStyle=suit==='h'||suit==='d'?'#bc2028':'#141414';
  g.textBaseline='alphabetic';
- g.font='700 '+(rank==='T'?'25':'29')+'px Arial';
- g.fillText(rank==='T'?'10':rank,box.x+9,box.y+31);
+ g.font='700 '+(rank==='10'?'25':'29')+'px Arial';
+ g.fillText(rank,box.x+9,box.y+31);
  g.font='700 28px Georgia';
  g.fillText(symbols.charAt(suits.indexOf(suit)),box.x+9,box.y+67);
  return window.ACRVision.classify(g.getImageData(0,0,c.width,c.height),box);
@@ -44,10 +45,13 @@ document.getElementById('run').addEventListener('click',function(){
  tbody.textContent='';
  var passed=0,failed=0;
  for(var i=0;i<ranks.length;i++)for(var j=0;j<suits.length;j++){
-  var expect=(ranks[i]==='T'?'10':ranks[i])+suits[j],result=simulate(ranks[i],suits[j]);
-  var ok=result.code===expect;if(ok)passed++;else failed++;
+  var expect=ranks[i]+suits[j],result=simulate(ranks[i],suits[j]);
+  var math=window.PokerMath;
+  var ok=result.code===expect&&result.rank===ranks[i]&&!!math&&
+    math.idFromCode(result.code)===j*13+i&&math.label(j*13+i)===ranks[i]+symbols[j];
+  if(ok)passed++;else failed++;
   var row=document.createElement('tr');
-  [(ranks[i]==='T'?'10':ranks[i])+symbols[j],result.code?result.code:'?',ok?'Преминат':'Неуспешен',
+  [ranks[i]+symbols[j],result.code?result.code:'?',ok?'Преминат':'Неуспешен',
   (result.reason||'')+' [стойност '+(result.rankScore==null?'—':result.rankScore)+'% / '+(result.rankSource||'—')+'; боя '+(result.suitScore==null?'—':result.suitScore)+'% / '+(result.suitSource||'—')+']'].forEach(function(x,k){
    var cell=document.createElement('td');cell.textContent=x;
    if(k===2)cell.className=ok?'ok':'fail';
@@ -55,7 +59,7 @@ document.getElementById('run').addEventListener('click',function(){
   });
   tbody.appendChild(row);
  }
- summary.textContent='Синтетичен тест: '+passed+'/52 успешни; '+failed+' неуспешни. Тестът е само за изкуствено нарисувани карти.';
+ summary.textContent='Синтетичен OCR + изчислителен модул: '+passed+'/52 успешни; '+failed+' неуспешни. Тестът е само за изкуствено нарисувани карти.';
 });
 }());
 </script>
