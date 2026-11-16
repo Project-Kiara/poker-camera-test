@@ -19,8 +19,10 @@
   '<div class="capture-actions">',
   '<button type="button" class="start" id="captureFrame" disabled>📷 Снимай</button>',
   '<button type="button" class="secondary" id="uploadPhoto">Качи снимка</button>',
+  '<button type="button" class="secondary" id="nativePhoto" style="grid-column:1/-1;min-height:35px">📸 Пълна снимка (до 12 MP)</button>',
   '</div>',
   '<input id="recognitionFile" type="file" accept="image/*" hidden aria-label="Качи снимка от ACR Poker">',
+  '<input id="nativeCameraFile" type="file" accept="image/*" capture="environment" hidden aria-label="Снимай с максималната фотографска резолюция на задната камера">',
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
@@ -72,10 +74,11 @@
  var playerSettings=analysis.querySelector('.config-row');
  if(playerSettings&&technicalMount)technicalMount.appendChild(playerSettings);
  analysis.hidden=true;
- var file=document.getElementById('recognitionFile'),status=document.getElementById('visionStatus');
+ var file=document.getElementById('recognitionFile'),nativeFile=document.getElementById('nativeCameraFile'),status=document.getElementById('visionStatus');
  var captureButton=document.getElementById('captureFrame');
  var uploadButton=document.getElementById('uploadPhoto');
  uploadButton.addEventListener('click',function(){file.click();});
+ document.getElementById('nativePhoto').addEventListener('click',function(){nativeFile.click();});
  var cardLine=document.getElementById('visionCards'),seatLine=document.getElementById('visionSeats');
  var heroLine=document.getElementById('visionHero'),othersLine=document.getElementById('visionOthers'),stageLine=document.getElementById('visionStage');
  var debugCanvas=document.getElementById('visionDebug');
@@ -326,15 +329,15 @@
    });
    drawDebug(video,frame,result);
    lastSignature='';repeats=0;lastApplied='';
-   status.textContent='Заснет и анализиран кадър: '+result.faceCount+' открити карти; '+result.visible.filter(function(c){return !!c.code;}).length+' разчетени.';
+   status.textContent='Видео кадър: '+video.videoWidth+' × '+video.videoHeight+'; OCR: '+frame.width+' × '+frame.height+'. '+result.faceCount+' открити карти; '+result.visible.filter(function(c){return !!c.code;}).length+' разчетени.';
   }catch(err){
    status.textContent='Кадърът не можа да се обработи: '+err.message;
   }
  });
 
- file.addEventListener('change',function(){
-  if(!file.files||!file.files[0])return;
-  var source=URL.createObjectURL(file.files[0]),img=new Image();
+ function processImageInput(sourceInput){
+  if(!sourceInput.files||!sourceInput.files[0])return;
+  var source=URL.createObjectURL(sourceInput.files[0]),img=new Image();
   status.textContent='Обработвам снимката…';
   img.onload=function(){
    try{
@@ -346,15 +349,23 @@
     });
     drawDebug(img,frame,result);
     lastSignature='';repeats=0;lastApplied='';
+    var sourceDimensions=img.naturalWidth+' × '+img.naturalHeight+' ('+
+      (img.naturalWidth*img.naturalHeight/1000000).toFixed(1)+' MP)';
     if(!bridge.snapshot().resetPending&&result.faceCount&&result.visible.every(function(c){return !!c.code;}))
-       status.textContent='Снимката е обработена: '+result.faceCount+' четливи открити карти. '+(getField('hero0')!==''?'':'Личните карти не се виждат.');
+      status.textContent='Оригинална снимка: '+sourceDimensions+'. '+result.faceCount+
+        ' разчетени карти. OCR обработва оптимизирано копие.';
+    else
+      status.textContent='Оригинална снимка: '+sourceDimensions+'. '+result.faceCount+
+        ' открити карти; има неясни или непотвърдени символи. OCR обработва оптимизирано копие.';
    }catch(err){status.textContent='Неуспешно разчитане: '+err.message;}
    URL.revokeObjectURL(source);
-   file.value=''; // Enable retesting the same image without a full page reload.
+   sourceInput.value=''; // Enable retesting the same image without a full page reload.
   };
-  img.onerror=function(){status.textContent='Снимката не може да се отвори.';URL.revokeObjectURL(source);file.value='';};
+  img.onerror=function(){status.textContent='Снимката не може да се отвори.';URL.revokeObjectURL(source);sourceInput.value='';};
   img.src=source;
- });
+ }
+ file.addEventListener('change',function(){processImageInput(file);});
+ nativeFile.addEventListener('change',function(){processImageInput(nativeFile);});
  function tick(){
   captureButton.disabled=!(video.readyState>=2&&video.videoWidth&&!video.paused);
   if(frameWorking){setTimeout(tick,650);return;}
