@@ -57,13 +57,30 @@ function glyphMask(img,box,part,variant){
  var y0=Math.max(0,Math.round(box.y+box.height*p[2])),
      y1=Math.min(img.height,Math.round(box.y+box.height*p[3]));
  var w=x1-x0,h=y1-y0;if(w<6||h<7)return null;
+ // Compare each glyph with its local card background. This preserves
+ // dark symbols on cards dimmed by ACR animations and translucent overlays.
+ var histogram=new Uint32Array(256),raw=img.data,total=w*h;
+ for(var py=y0;py<y1;py++)for(var px=x0;px<x1;px++){
+  var at=(py*img.width+px)*4;
+  histogram[Math.max(raw[at],raw[at+1],raw[at+2])]++;
+ }
+ var target=Math.ceil(total*.70),running=0,background=255;
+ for(var level=0;level<256;level++){
+  running+=histogram[level];
+  if(running>=target){background=level;break;}
+ }
+ var blackLimit=Math.min(145,Math.max(40,background-34));
  var src=new Uint8Array(w*h),redCount=0,blackCount=0;
  for(var y=0;y<h;y++)for(var x=0;x<w;x++){
-  var i=((y+y0)*img.width+x+x0)*4,r=img.data[i],g=img.data[i+1],b=img.data[i+2];
-  var red=r>76&&r>1.3*g&&r>1.2*b,black=Math.max(r,g,b)<145;
+  var i=((y+y0)*img.width+x+x0)*4,r=raw[i],g=raw[i+1],b=raw[i+2];
+  var red=r>76&&r>1.3*g&&r>1.2*b,black=Math.max(r,g,b)<blackLimit;
   if(red||black){src[y*w+x]=1;if(red)redCount++;else blackCount++;}
  }
- return {mask:maskNormalize(src,w,h),isRed:redCount>blackCount*1.2,count:redCount+blackCount};
+ return {mask:maskNormalize(src,w,h),
+  // Shaded red ink can overlap neutral gray shadows. Require several red
+  // pixels and retain the strict test for normal bright cards.
+  isRed:redCount>=8&&redCount>blackCount*(box.shaded?.09:1.2),
+  count:redCount+blackCount};
 }
 function similarity(a,b){var common=0,all=0;for(var i=0;i<576;i++){if(a[i]||b[i]){all++;if(a[i]&&b[i])common++;}}return all?common/all:0;}
 function matchSymbol(mask,kind){
@@ -157,7 +174,7 @@ function templateCoverage(){
 }
 
 function selectGlyph(img,box,part){
- var kind=part==='rank'?'rank':'suit',chosen=null;
+ var kind=part==='rank'?'rank':'suit',chosen=null,shadedVotes={},shadedCandidates={};
  for(var v=0;v<3;v++){
   var pixels=glyphMask(img,box,part,v);
   if(!pixels||!pixels.mask||pixels.count<10)continue;
@@ -169,17 +186,33 @@ function selectGlyph(img,box,part){
   var candidate={key:matched.first.key,score:matched.first.score,
     margin:gap,accepted:accepted,isRed:pixels.isRed,variant:v,
     source:matched.first.provenance||'unknown'};
-  // Do not replace a good first-crop reading. For uncertain ones,
-  // prefer a fully supported match with the strongest evidence.
-  if(v===0&&accepted)return candidate;
+  if(accepted){
+   shadedVotes[candidate.key]=(shadedVotes[candidate.key]||0)+1;
+   if(!shadedCandidates[candidate.key]||candidate.score>shadedCandidates[candidate.key].score)
+    shadedCandidates[candidate.key]=candidate;
+  }
+  // Normal cards keep the fast path. Shaded cards need crop agreement,
+  // because a winner banner may mimic one of the rank glyphs.
+  if(v===0&&accepted&&!box.shaded)return candidate;
   if(!chosen||(candidate.accepted&&!chosen.accepted)||
      (candidate.accepted===chosen.accepted&&
       candidate.score+Math.min(.15,candidate.margin)*.2>
       chosen.score+Math.min(.15,chosen.margin)*.2))chosen=candidate;
  }
+ if(box.shaded){
+  var consensus=null;
+  for(var k in shadedVotes)if(shadedVotes[k]>=2){
+   var contender=shadedCandidates[k];
+   if(!consensus||shadedVotes[k]>shadedVotes[consensus.key]||
+      shadedVotes[k]===shadedVotes[consensus.key]&&contender.score>consensus.score)
+    consensus=contender;
+  }
+  if(consensus)chosen=consensus;
+  else if(chosen)chosen.accepted=false;
+ }
  if(!chosen||!chosen.accepted){
   var alternate=fallbackGlyph(img,box,part);
-  if(alternate)return alternate;
+  if(alternate&&(!box.shaded||alternate.count>=2))return alternate;
  }
  return chosen;
 }

@@ -28,7 +28,7 @@
   '<summary>Допълнителни данни и OCR диагностика</summary>',
   '<p class="hint" id="ocrVersion">Интерфейс r6 · OCR r8 · 16.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
-  '<p class="hint"><a href="./ocr-selftest.html?v=r8">Тест на 52 синтетични карти</a> · <a href="./ocr-regression.html?v=r8">Разширена ACR диагностика</a></p>',
+  '<p class="hint"><a href="./ocr-selftest.html?v=r8">Тест на 52 синтетични карти</a> · <a href="./ocr-regression.html?v=r8">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r10">Тестове на затъмнени карти</a></p>',
   '<div class="config-row">',
   '<label><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>',
   '<label><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label>',
@@ -189,7 +189,8 @@
    var scoreRank=typeof c.rankScore==='number'?c.rankScore+'%':'няма';
    var scoreSuit=typeof c.suitScore==='number'?c.suitScore+'%':'няма';
    lines.push('#'+(i+1)+' '+(regions[x+','+y]||'Неуточнена')+
-    ' | рамка ('+Math.round(x)+','+Math.round(y)+') '+Math.round(c.box.width)+'×'+Math.round(c.box.height));
+    ' | рамка ('+Math.round(x)+','+Math.round(y)+') '+Math.round(c.box.width)+'×'+Math.round(c.box.height)+
+    (c.box.shaded?' | възстановена затъмнена карта':'') );
    lines.push('  Стойност: '+readRank(c)+' | сходство '+scoreRank+
     ' | разлика '+(c.rankMargin==null?'—':c.rankMargin+' пункта'));
    lines.push('  Боя: '+readSuit(c)+' | сходство '+scoreSuit+
@@ -247,6 +248,7 @@
  function applyResult(result){
   var changed=false;
   var board=result.board,hero=result.hero;
+  var previousBoard=boardCodes.slice();
   // Only write complete, consistently recognized face-up groups.
   if(result.uniqueCards&&result.boardComplete&&board.length>=3&&board.length<=5){
    var newBoard=board.map(function(c){return c.code;});
@@ -271,10 +273,25 @@
    changed=changeField('hero1',window.PokerMath.idFromCode(ownCodes[1]))||changed;
    previousHeroWasAuto=true;
   } else if(!hasHero&&previousHeroWasAuto){
-   // Do not leave a stale automatically-recognized hole hand after it disappears.
-   changed=changeField('hero0','')||changed;
-   changed=changeField('hero1','')||changed;
-   previousHeroWasAuto=false;
+   // At showdown animations often obscure one corner. Preserve the last
+   // confirmed own hand ONLY on the same board and the same tracked deal.
+   // Never infer a missing card from its large suit or from the winning hand.
+   var memory=bridge.snapshot();
+   var stableHero=ownCodes.length===2&&
+     memory.heroIdentity===ownCodes.slice().sort().join('|');
+   var boardMatches=previousBoard.length>=3&&result.boardComplete&&
+     board.length>=previousBoard.length&&
+     previousBoard.every(function(code,i){return board[i].code===code;});
+   if(stableHero&&boardMatches){
+    heroLine.textContent='Моите карти (запомнени от предишен четлив кадър): '+
+      ownCodes.map(shown).join(' ');
+    status.textContent='Част от личните карти е закрита. Запазвам по-рано потвърдената ръка за същото раздаване.';
+   }else{
+    changed=changeField('hero0','')||changed;
+    changed=changeField('hero1','')||changed;
+    previousHeroWasAuto=false;
+    ownCodes=[];
+   }
   }
   // Only count known distinct visible pairs; never infer unseen occupied seats.
   if(document.getElementById('autoPlayers').checked&&result.hero.length===2&&
