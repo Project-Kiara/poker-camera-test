@@ -118,7 +118,9 @@ document.getElementById('run').addEventListener('click',function(){
   checkGlyph('Борд Q♠: правилно чете пика','suit','s',
     '000000000000003c00007e0000ff0001ff8003ffc007fff01ffff83ffff83ffff83ffff83ffff81ffff81ffff80fcdf8000c00001c00001c00001c00003e00003e00000000000000'),
   checkGlyph('Борд Q♣: втори образец на спатия','suit','c',
-    '00000000000001ff0001ff8001ff8001ff8001ff8001ff8007fff01ffff83ffff83ffff83ffff83ffff83ffff81ffff80ffff0001800001800001800003c00003c00000000000000')
+    '00000000000001ff0001ff8001ff8001ff8001ff8001ff8007fff01ffff83ffff83ffff83ffff83ffff83ffff81ffff80ffff0001800001800001800003c00003c00000000000000'),
+  checkGlyph('Независима снимка 9♠: допълнителна калибрация','rank','9',
+    '000000000000007f0001ff8003ffc003f7e007c3e00781e00781e00781e00781e007c3e003ffe001ffe000fde00001e00001e00383e003e3e003ffc001ff8000ff00000000000000')
  ];
  var list=document.getElementById('results');list.textContent='';
  tests.forEach(function(t){var li=document.createElement('li');li.className=t.pass?'yes':'no';
