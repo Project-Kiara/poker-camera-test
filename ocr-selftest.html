@@ -48,7 +48,7 @@ document.getElementById('run').addEventListener('click',function(){
   var ok=result.code===expect;if(ok)passed++;else failed++;
   var row=document.createElement('tr');
   [ranks[i]+symbols[j],result.code?result.code:'?',ok?'Преминат':'Неуспешен',
-  (result.reason||'')+' [стойност '+(result.rankScore==null?'—':result.rankScore)+'%; боя '+(result.suitScore==null?'—':result.suitScore)+'%]'].forEach(function(x,k){
+  (result.reason||'')+' [стойност '+(result.rankScore==null?'—':result.rankScore)+'% / '+(result.rankSource||'—')+'; боя '+(result.suitScore==null?'—':result.suitScore)+'% / '+(result.suitSource||'—')+']'].forEach(function(x,k){
    var cell=document.createElement('td');cell.textContent=x;
    if(k===2)cell.className=ok?'ok':'fail';
    row.appendChild(cell);
