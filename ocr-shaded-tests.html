@@ -1,0 +1,57 @@
+<!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ACR — тестове за затъмнени карти</title>
+<style>body{background:#101927;color:#f2f6ff;max-width:760px;margin:22px auto;padding:0 16px;font:15px/1.5 system-ui}
+button{background:#7ddcbb;border:0;border-radius:9px;padding:12px;font-weight:700}li{padding:8px;border-bottom:1px solid #3b5069}.yes{color:#83ecae}.no{color:#ff939f}a{color:#9ee2ff}</style></head>
+<body><h1>Тестове за затъмнени карти и позиция на ръката</h1>
+<p>Тестови модели с ACR геометрия: пет общи карти, две долни карти, полупрозрачен банер, липсваща карта и чужди ръце.
+Тестовете проверяват откриването и групирането, а не доказват точността на OCR върху реална камера.</p>
+<button id="run">Стартирай тестовете</button><p id="summary" aria-live="polite">Още не са пуснати.</p><ol id="results"></ol>
+<p><a href="./">Към приложението</a> · <a href="./ocr-regression.html">Общи OCR тестове</a></p>
+<script src="./card-detector.js?v=shaded-r10"></script>
+<script src="./acr-vision.js?v=shaded-r10"></script>
+<script>
+(function(){
+'use strict';
+function fixture(opts){
+ var w=709,h=1536,canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+ var ctx=canvas.getContext('2d');ctx.fillStyle='#12512f';ctx.fillRect(0,0,w,h);
+ function box(x,y,width,height,color){ctx.fillStyle=color;ctx.fillRect(x,y,width,height);}
+ if(opts.board!==false)for(var i=0;i<5;i++)box(118+i*98,822,86,134,'#f8f8f8');
+ if(opts.hero!==false){
+  var col=opts.shaded===false?'#f8f8f8':'#969696';
+  box(171,1130,98,152,col);
+  if(opts.two!==false)box(271,1130,98,152,col);
+  if(opts.banner){
+   // Overlay a large white WINNER-style streak without changing card geometry.
+   box(155,1151,100,20,'#ffffff');
+  }
+ }
+ if(opts.foreign){
+  box(45,1051,47,73,'#ffffff');box(97,1051,47,73,'#ffffff');
+  box(569,1051,47,73,'#ffffff');box(620,1051,47,73,'#ffffff');
+ }
+ return ctx.getImageData(0,0,w,h);
+}
+function check(name,image,expected,board,hero){
+ var boxes=window.PokerCardDetector.detect(image);
+ var grouped=window.ACRVision.groupVisible(boxes.map(function(b){return {box:b,code:null};}),image.width,image.height);
+ return {name:name,pass:boxes.length===expected&&grouped.board.length===board&&grouped.hero.length===hero,
+   description:'открити '+boxes.length+'/'+expected+', борд '+grouped.board.length+'/'+board+', лични '+grouped.hero.length+'/'+hero};
+}
+document.getElementById('run').addEventListener('click',function(){
+ var tests=[
+  check('Нормални пет общи карти и две лични',fixture({shaded:false}),7,5,2),
+  check('Пет общи и две затъмнени лични',fixture({}),7,5,2),
+  check('WINNER банер върху личните карти',fixture({banner:true}),7,5,2),
+  check('Без лични карти: не се измислят',fixture({hero:false}),5,5,0),
+  check('Само една затъмнена карта: не се измисля двойка',fixture({two:false}),5,5,0),
+  check('Други открити ръце не се приемат за мои',fixture({hero:false,foreign:true}),9,5,0)
+ ];
+ var list=document.getElementById('results');list.textContent='';
+ tests.forEach(function(t){var li=document.createElement('li');li.className=t.pass?'yes':'no';
+ li.textContent=(t.pass?'✓ ':'✗ ')+t.name+' — '+t.description;list.appendChild(li);});
+ var total=tests.filter(function(t){return t.pass;}).length;
+ document.getElementById('summary').textContent=total+'/'+tests.length+' успешни; '+(tests.length-total)+' неуспешни.';
+});
+})();
+</script></body></html>
