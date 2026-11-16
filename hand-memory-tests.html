@@ -3,10 +3,10 @@
 <title>Покер анализатор — тестове за раздаване и математика</title>
 <style>body{max-width:780px;margin:24px auto;padding:0 16px;background:#101927;color:#e9f3ff;font:15px/1.5 system-ui}p{color:#b9cce0}button{padding:12px 18px;background:#61ddb3;border:0;border-radius:9px;font-weight:700}li{margin:6px 0;padding:7px;border-bottom:1px solid #34455e}.pass{color:#7af0b8}.fail{color:#ff9ea9}a{color:#a2d9ff}</style></head>
 <body><h1>Тестове за паметта на картите и вероятностите</h1>
-<p>Изпълнява 27 автоматизирани проверки в браузъра. Това не доказва, че OCR разпознава без грешка реални снимки.</p>
+<p>Изпълнява 36 автоматизирани проверки в браузъра. Това не доказва, че OCR разпознава без грешка реални снимки.</p>
 <button id="run">Пусни всички тестове</button><p id="summary" role="status">Тестовете не са стартирани.</p><ol id="results"></ol>
 <p><a href="./">Към приложението</a> · <a href="./ocr-regression.html">OCR диагностика</a></p>
-<script src="./poker-engine.js?v=deal-tests-20261116"></script><script src="./hand-tracker.js?v=deal-tests-20261116"></script><script>
+<script src="./poker-engine.js?v=deal-tests-20261116"></script><script src="./hand-tracker.js?v=deal-memory-r9"></script><script src="./deal-bridge.js?v=deal-memory-r9"></script><script>
 
 function runAll(){
  const tracker=window.PokerHandTracker,math=window.PokerMath,list=[];
@@ -56,9 +56,32 @@ function runAll(){
  s=k.observe(next);
  check('Броенето започва отново',s.resetPending===1);
  s=k.observe({...next,uniqueCards:false});
- check('Невалиден кадър не увеличава брояча',s.resetPending===1);
- s=k.observe(same);
- check('Старата ръка отменя съмнителната смяна',s.resetPending===0&&s.hand===1);
+ check('Невалиден кадър прекъсва последователността',s.resetPending===0);
+ s=k.observe(river);
+ check('Връщане към ривъра отменя съмнителната смяна',s.resetPending===0&&s.hand===1);
+ const identical=tracker.createTracker();
+ identical.observe(river);identical.observe(same);identical.observe(same);
+ s=identical.observe(same);
+ check('Дори еднакви лични карти в ново раздаване се нулират',s.hand===2&&s.seen.length===2);
+ const bridge=window.PokerDealBridge;
+ let o=bridge.observe(river);
+ check('Интеграцията получава OCR състояние',o.state.seen.length===9);
+ let stored=bridge.context();
+ check('Без потвърждение чуждите карти не се ползват',stored.dead.length===0&&stored.knownOpponents.length===0);
+ bridge.confirmOpponent(['Ks','Kd'],'showdown');
+ stored=bridge.context();
+ check('Потвърден шоудаун влиза в изчислителните данни',stored.knownOpponents.length===1&&stored.dead.length===0);
+ o=bridge.observe(next);
+ check('Първа смяна не изтрива старото раздаване',o.pending&&o.state.hand===1);
+ check('При смяна математиката е блокирана',rejects(function(){bridge.context();}));
+ bridge.observe(next);o=bridge.observe(next);stored=bridge.context();
+ check('Потвърдената смяна нулира чуждите ръце',o.handChanged&&stored.knownOpponents.length===0&&stored.hand===2);
+ bridge.observe(frame('Ривър',['5s','4c','10d','8c','10h'],['Qd','Qc'],['Ks','Kd']));
+ bridge.confirmOpponent(['Ks','Kd'],'folded');
+ stored=bridge.context();
+ check('Фолдналите карти стигат до изключените',stored.dead.length===2);
+ bridge.nextHand();stored=bridge.context();
+ check('Ръчното ново раздаване чисти и моста',stored.dead.length===0&&stored.hand===3);
  const base={hero:cards('Ac Ad'),board:cards('2c 3d 4h 9s Js'),players:2};
  let r=sample({...base,knownOpponents:[cards('Kc Kd')]});
  check('Точно известен по-слаб противник: 100% печалба',r.win===100&&r.loss===0&&r.knownOpponents===1);
