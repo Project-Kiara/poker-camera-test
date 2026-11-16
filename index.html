@@ -28,6 +28,32 @@
     #status[data-kind="error"] { color: #ff9baa; }
     #status[data-kind="ok"] { color: #7ef4c8; }
     .foot { font-size: 13px; margin-top: 17px; }
+
+    /* One-screen local calculation panel; existing camera styles stay intact. */
+    .panel { margin: 16px 0; padding: 14px; border: 1px solid #35475d; border-radius: 14px; background: #172537; }
+    .panel h2 { margin: 0 0 8px; font-size: 21px; }
+    .panel .hint { font-size: 13px; color: #b6c6d8; margin: 7px 0 14px; }
+    .panel label { display: block; margin: 12px 0 6px; font-weight: 650; font-size: 14px; }
+    .card-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+    .card-row.hero { grid-template-columns: repeat(2, minmax(0, 100px)); }
+    .card-row select, .panel select, .panel input { width: 100%; min-width: 0; font-size: 16px; border-radius: 9px; padding: 11px 6px; border: 1px solid #52647b; color: #f4f7fb; background: #203247; }
+    .card-row select { text-align: center; font-weight: 700; }
+    .config-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .panel .actions { display: flex; gap: 10px; margin: 15px 0 12px; }
+    .panel .actions button { flex: 1; font-size: 15px; }
+    .panel .actions button:disabled { opacity: .5; }
+    .result-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 6px; text-align: center; margin: 12px 0; }
+    .result-grid > div { padding: 10px 3px; background: #21354a; border-radius: 10px; }
+    .result-grid small { display: block; color: #bcc8d8; font-size: 12px; }
+    .result-grid strong { display: block; font-size: clamp(17px, 5vw, 25px); margin: 5px 0; font-variant-numeric: tabular-nums; }
+    #winValue { color: #7ef4c8; } #loseValue { color: #ff9baa; } #tieValue { color: #d1d9ff; }
+    .analysis-message { font-size: 13px; color: #e6d9b1; min-height: 18px; margin: 8px 0; }
+    .analysis-message.error { color: #ff9baa; }
+    .analysis-details { font-size: 13px; line-height: 1.5; color: #b6c6d8; }
+    .analysis-details p { margin: 5px 0; }
+    .analysis-details b { color: #fff; }
+    .fineprint { font-size: 12px; color: #9fb1c7; margin: 11px 0 0; }
+    @media(max-width:360px) { .panel {padding:11px;} .card-row{gap:4px;} .card-row select{padding:9px 2px;} }
   </style>
 </head>
 <body>
@@ -44,6 +70,53 @@
       <button id="flip" class="secondary" disabled>Смени камерата</button>
       <button id="measure" class="secondary" disabled>Провери картината</button>
     </div>
+
+    <section class="panel" id="analysisPanel">
+      <h2>Покер анализ</h2>
+      <p class="hint"><strong>Експериментален режим:</strong> картите се въвеждат ръчно. Автоматичното разпознаване от камерата предстои.</p>
+      <label for="hero0">Моите две карти</label>
+      <div id="heroCards" class="card-row hero"></div>
+      <label for="board0">Общи карти (флоп, търн, ривър)</label>
+      <div id="boardCards" class="card-row"></div>
+      <div class="config-row">
+        <div>
+          <label for="players">Активни играчи, с мен</label>
+          <select id="players">
+            <option value="2">2</option><option value="3">3</option><option value="4">4</option>
+            <option value="5">5</option><option value="6" selected>6</option><option value="7">7</option>
+            <option value="8">8</option><option value="9">9</option>
+          </select>
+        </div>
+        <div>
+          <label for="simCount">Симулации</label>
+          <select id="simCount">
+            <option value="500">500 (бързо)</option>
+            <option value="2000" selected>2 000</option>
+            <option value="5000">5 000 (по-точно)</option>
+          </select>
+        </div>
+      </div>
+      <label for="deadCards">Други известни карти, които вече са извън играта (по желание)</label>
+      <input id="deadCards" type="text" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="Напр. Qh 7c или Q♥ 7♣">
+      <div class="config-row">
+        <div><label for="pot">Пот (по желание)</label><input id="pot" type="text" inputmode="decimal" placeholder="0"></div>
+        <div><label for="callAmount">Сума за кол (по желание)</label><input id="callAmount" type="text" inputmode="decimal" placeholder="0"></div>
+      </div>
+      <div class="actions">
+        <button type="button" id="runAnalysis" class="start">Изчисли</button>
+        <button type="button" id="clearAnalysis" class="secondary">Изчисти</button>
+      </div>
+      <p class="analysis-message" id="analysisMessage" role="status" aria-live="polite">Избери двете си карти, за да изчислиш вероятностите.</p>
+      <div class="result-grid" aria-live="polite">
+        <div><small>Печалба</small><strong id="winValue">—</strong></div>
+        <div><small>Загуба</small><strong id="loseValue">—</strong></div>
+        <div><small>Равенство</small><strong id="tieValue">—</strong></div>
+      </div>
+      <div class="analysis-details" id="analysisDetails">
+        <p>Резултатът ще се покаже тук след изчислението.</p>
+      </div>
+      <p class="fineprint">Вероятностите са ориентировъчни при случайни неизвестни карти на противниците. Не предсказват техните решения или точната им сила. Изчисленията се изпълняват само в браузъра.</p>
+    </section>
     <div class="info" aria-live="polite">
       <p id="status">Състояние: не е стартирана.</p>
       <p id="details">Разрешението за камера ще бъде поискано след натискане на бутона.</p>
@@ -147,6 +220,178 @@
       window.addEventListener('pagehide', function () { if (stream) stopCamera(); });
       refreshButtons();
     })();
+  </script>
+
+  <script src="./poker-engine.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var math = window.PokerMath;
+    var heroRoot = document.getElementById('heroCards');
+    var boardRoot = document.getElementById('boardCards');
+    var runButton = document.getElementById('runAnalysis');
+    var clearButton = document.getElementById('clearAnalysis');
+    var message = document.getElementById('analysisMessage');
+    var details = document.getElementById('analysisDetails');
+    var win = document.getElementById('winValue');
+    var lose = document.getElementById('loseValue');
+    var tie = document.getElementById('tieValue');
+    var generation = 0;
+    var rankList = '23456789TJQKA';
+    var suitList = 'cdhs';
+    var symbols = '♣♦♥♠';
+
+    function makeSelect(root, id) {
+      var select = document.createElement('select');
+      select.id = id;
+      select.setAttribute('aria-label', id.indexOf('hero') === 0 ? 'Лична карта ' + (Number(id.slice(-1))+1) : 'Обща карта ' + (Number(id.slice(-1))+1));
+      var blank = document.createElement('option');
+      blank.value = ''; blank.textContent = '—'; select.appendChild(blank);
+      for (var s = 0; s < 4; s++) {
+        for (var r = 0; r < 13; r++) {
+          var option = document.createElement('option');
+          option.value = s * 13 + r;
+          option.textContent = rankList.charAt(r) + symbols.charAt(s);
+          select.appendChild(option);
+        }
+      }
+      select.addEventListener('change', markChanged);
+      root.appendChild(select);
+      return select;
+    }
+    if (!math) {
+      message.textContent = 'Изчислителният модул не е зареден. Презареди страницата.';
+      message.className = 'analysis-message error';
+      runButton.disabled = true;
+      return;
+    }
+    var heroSelects = [makeSelect(heroRoot, 'hero0'),makeSelect(heroRoot,'hero1')];
+    var boardSelects = [];
+    for (var b = 0; b < 5; b++) boardSelects.push(makeSelect(boardRoot,'board'+b));
+    var watched = ['players','simCount','deadCards','pot','callAmount'];
+    watched.forEach(function (id) {
+      document.getElementById(id).addEventListener('input', markChanged);
+      document.getElementById(id).addEventListener('change', markChanged);
+    });
+
+    function clearResults() {
+      win.textContent = '—'; lose.textContent = '—'; tie.textContent = '—';
+      details.textContent = 'Няма текущо изчисление.';
+    }
+    function markChanged() {
+      generation++;
+      runButton.disabled = false;
+      clearResults();
+      message.className = 'analysis-message';
+      message.textContent = 'Данните са променени. Натисни „Изчисли“.';
+    }
+    function getSelected(selects) {
+      return selects.map(function(x) {return x.value === '' ? null : Number(x.value);});
+    }
+    function parseDeadCards(raw) {
+      var trimmed = raw.trim();
+      if (!trimmed) return [];
+      var tokens = trimmed.split(/[\s,;]+/), ids = [];
+      for (var i = 0; i < tokens.length; i++) {
+        if (!tokens[i]) continue;
+        var id = math.idFromCode(tokens[i]);
+        if (id < 0) throw new Error('Неизвестна карта: „' + tokens[i] + '“. Използвай напр. Ah или A♥.');
+        ids.push(id);
+      }
+      return ids;
+    }
+    function getNonnegativeNumber(id) {
+      var raw = document.getElementById(id).value.trim().replace(',','.');
+      if (!raw) return null;
+      var v = Number(raw);
+      if (!Number.isFinite(v) || v < 0) throw new Error('Потът и сумата за кол трябва да са неотрицателни числа.');
+      return v;
+    }
+    function pct(value) { return value.toFixed(1).replace('.',',') + '%'; }
+    function show(result, pot, call) {
+      win.textContent = pct(result.win);
+      lose.textContent = pct(result.loss);
+      tie.textContent = pct(result.tie);
+      details.textContent = '';
+      function addLine(key, val) {
+        var p = document.createElement('p');
+        var strong = document.createElement('b');
+        strong.textContent = key + ': ';
+        p.appendChild(strong);
+        p.appendChild(document.createTextNode(val));
+        details.appendChild(p);
+      }
+      addLine('Еквити (вкл. поделен пот)', pct(result.equity));
+      addLine('Проверени раздавания', result.done.toLocaleString('bg-BG'));
+      if (pot !== null && call !== null) {
+        if (call === 0) addLine('Цена за кол', '0 — няма необходим залог за кол.');
+        else {
+          var odds = 100 * call / (pot + call);
+          addLine('Минимално еквити според пот оддс', pct(odds));
+          addLine('Сравнение', result.equity >= odds ? 'Оценката е над този праг.' : 'Оценката е под този праг.');
+        }
+      }
+      var ranked = result.categories.map(function(p, idx){return {name:result.names[idx], percentage:p};});
+      ranked.sort(function(a,b){return b.percentage-a.percentage;});
+      addLine('Най-вероятна крайна комбинация', ranked[0].name + ' (' + pct(ranked[0].percentage) + ')');
+    }
+    runButton.addEventListener('click', function () {
+      generation++;
+      var current = generation;
+      var simulation, pot, call;
+      try {
+        var hero = getSelected(heroSelects);
+        if (hero[0] === null || hero[1] === null) throw new Error('Избери и двете си лични карти.');
+        var ordered = getSelected(boardSelects), board = [];
+        var gaps = false;
+        ordered.forEach(function(v) {
+          if (v === null) gaps = true;
+          else {
+            if (gaps) throw new Error('Общите карти трябва да са последователни, без празно място по средата.');
+            board.push(v);
+          }
+        });
+        var dead = parseDeadCards(document.getElementById('deadCards').value);
+        pot = getNonnegativeNumber('pot'); call = getNonnegativeNumber('callAmount');
+        if ((pot === null) !== (call === null)) throw new Error('За пот оддс въведи и пота, и сумата за кол.');
+        simulation = math.simulator({
+          hero: hero, board: board, dead: dead,
+          players: Number(document.getElementById('players').value),
+          iterations: Number(document.getElementById('simCount').value)
+        });
+      } catch(err) {
+        clearResults();
+        message.textContent = err.message;
+        message.className = 'analysis-message error';
+        return;
+      }
+      runButton.disabled = true;
+      clearResults();
+      message.className = 'analysis-message';
+      function nextBatch() {
+        if (current !== generation) return;
+        var complete = simulation.batch(60);
+        var state = simulation.result();
+        if (complete) {
+          show(state, pot, call);
+          message.textContent = 'Готово — изчислението е по въведените карти.';
+          runButton.disabled = false;
+        } else {
+          message.textContent = 'Изчисляване: ' + state.done + ' / ' + state.total + ' симулации…';
+          setTimeout(nextBatch, 0);
+        }
+      }
+      setTimeout(nextBatch, 0);
+    });
+    clearButton.addEventListener('click', function () {
+      heroSelects.concat(boardSelects).forEach(function(el){el.value='';});
+      ['deadCards','pot','callAmount'].forEach(function(id){document.getElementById(id).value='';});
+      document.getElementById('players').value='6';
+      document.getElementById('simCount').value='2000';
+      markChanged();
+      message.textContent = 'Изчистено. Избери двете си лични карти.';
+    });
+  }());
   </script>
 </body>
 </html>
