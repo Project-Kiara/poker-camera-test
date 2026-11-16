@@ -350,7 +350,17 @@ function groupVisible(cards,w,h){
    others:cards.filter(function(c){return selected.indexOf(c)<0;})};
 }
 function analyze(img){
- var detect=root.PokerCardDetector,face=detect?detect.detect(img).map(function(b){return classify(img,b);}):[];
+ var detect=root.PokerCardDetector,boxes=detect?detect.detect(img):[];
+ // ACR portrait screenshots place action controls underneath the hole cards.
+ // Card-shaped decorations in that UI zone are not poker cards.
+ var portrait=img.height/img.width>1.65&&img.height/img.width<2.7;
+ var ignoredUi=0;
+ var candidates=boxes.filter(function(box){
+  var isActionUi=portrait&&box.y/img.height>.90;
+  if(isActionUi)ignoredUi++;
+  return !isActionUi;
+ });
+ var face=candidates.map(function(box){return classify(img,box);});
  var groups=groupVisible(face,img.width,img.height),backs=detectBurgundyPairs(img);
  var board=groups.board,hero=groups.hero;
  var combined=board.concat(hero).filter(function(c){return !!c.code;}).map(function(c){return c.code;});
@@ -372,6 +382,7 @@ function analyze(img){
   return x>.25&&x<.75&&y>.20&&y<.72;
  });
  return {visible:face,board:board,hero:hero,others:groups.others,
+  ignoredUiBoxes:ignoredUi,
   faceCount:face.length,coveredHands:otherBacks.length,backPairs:otherBacks,
   activePlayers:otherBacks.length+(hero.length===2?1:0),
   stage:stage||(possibleBoard?'Неясен етап':'Префлоп'),
