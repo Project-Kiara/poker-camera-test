@@ -109,27 +109,72 @@ function detectBurgundyPairs(img){
  }
  return pairs;
 }
-function groupVisible(cards,h){
- var groups=[];
- cards.forEach(function(card){
-  var mid=card.box.y+card.box.height/2,group=null;
-  for(var i=0;i<groups.length;i++)if(Math.abs(groups[i].center-mid)<card.box.height*.45){group=groups[i];break;}
-  if(!group){group={center:mid,cards:[]};groups.push(group);}group.cards.push(card);
+// Keep community cards, the player's hole cards and other visible hands separate.
+// Location is a heuristic for the ACR layout, never proof of a player's identity.
+function groupVisible(cards,w,h){
+ var rows=[],groups=[];
+ var ordered=cards.slice().sort(function(a,b){return (a.box.y+a.box.height/2)-(b.box.y+b.box.height/2);});
+ ordered.forEach(function(card){
+  var mid=card.box.y+card.box.height/2,row=null;
+  for(var i=0;i<rows.length;i++){
+   if(Math.abs(rows[i].center-mid)<Math.max(rows[i].height,card.box.height)*.40){row=rows[i];break;}
+  }
+  if(!row){row={center:mid,height:card.box.height,cards:[]};rows.push(row);}
+  row.cards.push(card);
+  row.center=row.cards.reduce(function(t,c){return t+c.box.y+c.box.height/2;},0)/row.cards.length;
  });
- groups.forEach(function(g){g.cards.sort(function(a,b){return a.box.x-b.box.x;});});
- var boards=groups.filter(function(g){return g.cards.length>=3&&g.cards.length<=5;});
- boards.sort(function(a,b){return b.cards.length-a.cards.length;});
- var heroes=groups.filter(function(g){return g.cards.length===2&&g.center>h*.67;});
- heroes.sort(function(a,b){return b.center-a.center;});
- return {board:boards.length?boards[0].cards:[],hero:heroes.length?heroes[0].cards:[]};
+ rows.forEach(function(row){
+  row.cards.sort(function(a,b){return a.box.x-b.box.x;});
+  var group=[];
+  function append(){if(group.length){groups.push(group);group=[];}}
+  row.cards.forEach(function(card){
+   if(group.length){
+    var last=group[group.length-1];
+    var gap=card.box.x-(last.box.x+last.box.width);
+    if(gap>Math.max(last.box.width,card.box.width)*1.75)append();
+   }
+   group.push(card);
+  });
+  append();
+ });
+ function measures(g){
+  var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  g.forEach(function(c){
+   minX=Math.min(minX,c.box.x);maxX=Math.max(maxX,c.box.x+c.box.width);
+   minY=Math.min(minY,c.box.y);maxY=Math.max(maxY,c.box.y+c.box.height);
+  });
+  return {cards:g,cx:(minX+maxX)/2/w,cy:(minY+maxY)/2/h,height:(maxY-minY)/h};
+ }
+ var sets=groups.map(measures);
+ var boards=sets.filter(function(g){
+  return g.cards.length>=3&&g.cards.length<=5&&g.cx>.22&&g.cx<.78&&g.cy>.16&&g.cy<.79;
+ });
+ boards.sort(function(a,b){
+  function score(g){return Math.abs(g.cx-.5)*3+Math.abs(g.cy-.47)+(.035*(5-g.cards.length));}
+  return score(a)-score(b);
+ });
+ var board=boards.length?boards[0]:null;
+ var heroes=sets.filter(function(g){
+  return g!==board&&g.cards.length===2&&g.cx>.27&&g.cx<.73&&
+   g.cy>.63&&(!board||g.cy>board.cy+Math.max(.095,board.height*.70));
+ });
+ heroes.sort(function(a,b){return (Math.abs(a.cx-.5)*2+(1-a.cy))-(Math.abs(b.cx-.5)*2+(1-b.cy));});
+ var hero=heroes.length?heroes[0]:null;
+ var selected=(board?board.cards:[]).concat(hero?hero.cards:[]);
+ return {board:board?board.cards:[],hero:hero?hero.cards:[],
+   others:cards.filter(function(c){return selected.indexOf(c)<0;})};
 }
 function analyze(img){
  var detect=root.PokerCardDetector,face=detect?detect.detect(img).map(function(b){return classify(img,b);}):[];
- var groups=groupVisible(face,img.height),backs=detectBurgundyPairs(img);
- return {visible:face,board:groups.board,hero:groups.hero,
+ var groups=groupVisible(face,img.width,img.height),backs=detectBurgundyPairs(img);
+ var board=groups.board,hero=groups.hero;
+ var combined=board.concat(hero).filter(function(c){return !!c.code;}).map(function(c){return c.code;});
+ var noDuplicates=(new Set(combined)).size===combined.length;
+ return {visible:face,board:board,hero:hero,others:groups.others,
   faceCount:face.length,coveredHands:backs.length,
-  boardComplete:groups.board.length>=3&&groups.board.every(function(c){return !!c.code;})};
+  boardComplete:board.length>=3&&board.every(function(c){return !!c.code;})&&noDuplicates,
+  uniqueCards:noDuplicates};
 }
-root.ACRVision={analyze:analyze,classify:classify,glyphMask:glyphMask,matchSymbol:matchSymbol,templates:templates};
+root.ACRVision={analyze:analyze,classify:classify,glyphMask:glyphMask,matchSymbol:matchSymbol,templates:templates,groupVisible:groupVisible};
 
 }(typeof window!=='undefined'?window:globalThis));
