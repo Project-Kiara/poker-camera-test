@@ -230,13 +230,28 @@
         setStatus('изчаква разрешение от Safari', '');
         try {
           // No microphone access is requested.
-          var requested = { audio: false, video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } };
+          // Prefer the highest 4K rear-camera video mode supported by iPhone 7 Plus.
+          // Ideal constraints let Safari fall back instead of failing.
+          var targetWidth = facing === 'environment' ? 3840 : 1920;
+          var targetHeight = facing === 'environment' ? 2160 : 1080;
+          var requested = { audio: false, video: {
+            facingMode: { ideal: facing },
+            width: { ideal: targetWidth }, height: { ideal: targetHeight },
+            frameRate: { ideal: 30 }, aspectRatio: { ideal: 16 / 9 }
+          } };
           stream = await navigator.mediaDevices.getUserMedia(requested);
           video.srcObject = stream;
           try { await video.play(); } catch (_) { /* Some Safari versions play on metadata. */ }
           preview.classList.add('active');
           setStatus('камерата работи', 'ok');
-          details.textContent = 'Камера: ' + (facing === 'environment' ? 'задна' : 'предна') + '. Натисни „Провери картината“ за резолюцията.';
+          var activeTrack = stream.getVideoTracks()[0];
+          var settings = activeTrack && typeof activeTrack.getSettings === 'function' ? activeTrack.getSettings() : {};
+          var actualW = settings.width || video.videoWidth;
+          var actualH = settings.height || video.videoHeight;
+          details.textContent = 'Камера: ' + (facing === 'environment' ? 'задна' : 'предна') +
+            '. Заявена видео резолюция: ' + targetWidth + ' × ' + targetHeight +
+            '. Реална видео резолюция от Safari: ' + (actualW && actualH ? actualW + ' × ' + actualH : 'изчаква се') +
+            '. За пълна 12 MP фотография използвай бутона „Пълна снимка“.';
         } catch (error) {
           if (stream) stream.getTracks().forEach(function (track) { track.stop(); });
           stream = null;
@@ -259,9 +274,14 @@
       });
       measureButton.addEventListener('click', function () {
         if (!stream) return;
-        var w = video.videoWidth, h = video.videoHeight;
+        var currentTrack = stream.getVideoTracks()[0];
+        var actualSettings = currentTrack && typeof currentTrack.getSettings === 'function' ? currentTrack.getSettings() : {};
+        var w = actualSettings.width || video.videoWidth, h = actualSettings.height || video.videoHeight;
         if (w && h) {
-          details.textContent = 'Картината е ' + w + ' × ' + h + ' пиксела. Камера: ' + (facing === 'environment' ? 'задна' : 'предна') + '. Няма запис или изпращане на видео.';
+          details.textContent = 'Реална видео резолюция: ' + w + ' × ' + h +
+            ' (' + (w*h/1000000).toFixed(1) + ' MP). Камера: ' +
+            (facing === 'environment' ? 'задна' : 'предна') +
+            '. Максимумът на задния видео режим е 4K (3840 × 2160), но Safari може да ограничи резолюцията. Няма запис или изпращане на видео.';
         } else {
           details.textContent = 'Камерата е включена, но Safari още не е предоставил размерите на кадъра.';
         }
