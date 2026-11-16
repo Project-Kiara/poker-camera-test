@@ -63,7 +63,7 @@ function matchSymbol(mask,kind){
   var e=refs[i],score=similarity(mask,e.mask);
   // Synthetic font references require more evidence than calibrated ACR glyphs.
   if(e.provenance==='font')score-=0.05;
-  if(!byKey[e.key]||score>byKey[e.key].score)byKey[e.key]={key:e.key,score:score};
+  if(!byKey[e.key]||score>byKey[e.key].score)byKey[e.key]={key:e.key,score:score,provenance:e.provenance};
  }
  for(var k in byKey){var e=byKey[k];if(!first||e.score>first.score){second=first;first=e;}else if(!second||e.score>second.score)second=e;}
  return {first:first,second:second};
@@ -158,7 +158,8 @@ function selectGlyph(img,box,part){
   var accepted=matched.first.score>=(part==='rank'?.68:.71)&&
        gap>=(part==='rank'?.043:.055);
   var candidate={key:matched.first.key,score:matched.first.score,
-    margin:gap,accepted:accepted,isRed:pixels.isRed,variant:v};
+    margin:gap,accepted:accepted,isRed:pixels.isRed,variant:v,
+    source:matched.first.provenance||'unknown'};
   // Do not replace a good first-crop reading. For uncertain ones,
   // prefer a fully supported match with the strongest evidence.
   if(v===0&&accepted)return candidate;
@@ -186,6 +187,7 @@ function classify(img,box){
    rankDetected:!!rank,suitDetected:!!suit,
    rankScore:Math.round(rank.score*100),suitScore:Math.round(suit.score*100),
    rankMargin:Math.round(rank.margin*100),suitMargin:Math.round(suit.margin*100),
+   rankSource:rank.source||'unknown',suitSource:suit.source||'unknown',
    guess:rank.key+suit.key,confidence:Math.round(100*Math.min(rank.score,suit.score)),
    reason:good?'':!validColor?'Несъответствие между цвят и боя':
     !rankOk&&!suitOk?'Непотвърдени стойност и боя':!rankOk?'Непотвърдена стойност':'Непотвърдена боя'};
