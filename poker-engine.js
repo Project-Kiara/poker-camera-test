@@ -85,11 +85,19 @@
   function simulator(input) {
     var hero = input.hero || [], board = input.board || [], dead = input.dead || [];
     var players = input.players, iterations = input.iterations || 2000;
+    var knownOpponents = input.knownOpponents || [];
     if (hero.length !== 2) throw new Error('Посочи и двете лични карти.');
     if ([0,3,4,5].indexOf(board.length) < 0) throw new Error('Общите карти трябва да са 0, 3, 4 или 5.');
     if (!Number.isInteger(players) || players < 2 || players > 9) throw new Error('Избери 2–9 активни играчи, включително теб.');
     if (!Number.isInteger(iterations) || iterations < 100 || iterations > 20000) throw new Error('Невалиден брой симулации.');
+    if (!Array.isArray(knownOpponents) || knownOpponents.length > players - 1)
+      throw new Error('Невалиден списък с разкрити ръце на противници.');
     var known = hero.concat(board,dead), seen = {}, deck = [], i;
+    for (i = 0; i < knownOpponents.length; i++) {
+      if (!Array.isArray(knownOpponents[i]) || knownOpponents[i].length !== 2)
+        throw new Error('Всяка разкрита ръка трябва да съдържа точно две карти.');
+      known = known.concat(knownOpponents[i]);
+    }
     for (i = 0; i < known.length; i++) {
       var id = known[i];
       if (!Number.isInteger(id) || id < 0 || id > 51) throw new Error('Невалидна карта.');
@@ -98,7 +106,8 @@
     }
     for (i = 0; i < 52; i++) if (!seen[i]) deck.push(i);
     var remainingBoard = 5 - board.length, opponents = players - 1;
-    var draws = remainingBoard + opponents * 2;
+    var randomOpponents = opponents - knownOpponents.length;
+    var draws = remainingBoard + randomOpponents * 2;
     if (draws > deck.length) throw new Error('Недостатъчно останали карти за този брой играчи.');
     var count = 0, wins = 0, losses = 0, ties = 0, share = 0;
     var categories = [0,0,0,0,0,0,0,0,0];
@@ -115,7 +124,9 @@
       categories[category(own)]++;
       var best = own, winnerCount = 1, position = remainingBoard;
       for (i = 0; i < opponents; i++) {
-        var other = evaluate([pool[position++], pool[position++]].concat(finalBoard));
+        var other = i < knownOpponents.length ?
+          evaluate(knownOpponents[i].concat(finalBoard)) :
+          evaluate([pool[position++], pool[position++]].concat(finalBoard));
         if (other > best) { best = other; winnerCount = 1; }
         else if (other === best) winnerCount++;
       }
@@ -128,6 +139,7 @@
       var denom = count || 1;
       return {
         done: count, total: iterations, players: players,
+        knownOpponents: knownOpponents.length,
         win: 100 * wins / denom, loss: 100 * losses / denom,
         tie: 100 * ties / denom, equity: 100 * share / denom,
         categories: categories.map(function (n) {return 100 * n / denom;}),
