@@ -11,7 +11,7 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
 <button id="run" type="button">Пусни проверките</button>
 <p id="summary" role="status">Готов за тест.</p><ol id="list"></ol>
 <p><a href="./">Към камерата</a> · <a href="./ocr-library-tests.html?v=r19">Тест на 52 карти</a></p>
-<script src="./acr-temporal.js?v=consensus-r20"></script>
+<script src="./acr-temporal.js?v=slot-lock-r23"></script>
 <script>
 (function(){
  'use strict';
@@ -83,6 +83,58 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
   t.reset();
   f=t.observe(frame([card(null,null),card(null,null,null,220)]),1);
   check('Празните две лични карти остават празни',f.hero.every(function(x){return !x.code;}));
+
+  // Regression: visible camera cards Q♣ 2♦ and J♥ A♠ 10♠ remain stable
+  // through one unreadable image and a single conflicting OCR result.
+  var stable=mod.createTracker();
+  function screenshot(){
+   return frame([card('Q','c','Qc',100),card('2','d','2d',220)],
+    [card('J','h','Jh',30),card('A','s','As',130),card('10','s','10s',230)],'Флоп');
+  }
+  stable.observe(screenshot(),100);
+  stable.observe(screenshot(),700);
+  var blurred=screenshot();
+  blurred.board[1]=card(null,null,null,130);
+  blurred.hero[1]=card(null,null,null,220);
+  f=stable.observe(blurred,1300);
+  check('След потвърждение A♠ и 2♦ не изчезват от размазан кадър',
+   f.board[1].code==='As'&&f.hero[1].code==='2d'&&f.boardComplete);
+  var mistaken=screenshot();mistaken.hero[1]=card('3','s','3s',220);
+  f=stable.observe(mistaken,1900);
+  check('Еднократно грешно 3♠ не замества заключеното 2♦',
+   f.hero[1].code===null&&f.temporalConflict);
+  f=stable.observe(screenshot(),2500);
+  check('След правилен кадър 2♦ се възстановява',f.hero[1].code==='2d'&&!f.temporalConflict);
+  var turn=screenshot();turn.board.push(card('4','h','4h',330));turn.stage='Търн';
+  f=stable.observe(turn,3100);
+  check('На търна старите карти остават по позиции',
+   f.boardComplete&&f.board.length===4&&f.board[0].code==='Jh'&&f.hero[0].code==='Qc');
+  f=stable.observe(frame([card('Q','c','Qc',100),card(null,null,null,220)],
+    [card('J','h','Jh',30),card('A','s','As',130),card('10','s','10s',230),
+      card('4','h','4h',330)],'Търн'),18000);
+  check('След изтичане на срока не се показва застояла 2♦',f.hero[1].code===null);
+  var newDeal=mod.createTracker();
+  function oldScene(){return frame([card('8','h','8h',100),card('6','h','6h',220)],
+    [card('5','s','5s',30),card('2','d','2d',130),card('5','c','5c',230)],'Флоп');}
+  function freshScene(){return frame([card('Q','c','Qc',100),card('2','d','2d',220)],
+    [card('J','h','Jh',30),card('A','s','As',130),card('10','s','10s',230)],'Флоп');}
+  newDeal.observe(oldScene(),100);newDeal.observe(oldScene(),650);
+  f=newDeal.observe(freshScene(),1200);
+  check('Нов борд и нови лични карти: първият кадър не е достатъчен',
+   f.temporalConflict===true&&!f.forceNewHand);
+  f=newDeal.observe(freshScene(),1750);
+  check('Нов борд и нови лични карти: вторият кадър още не нулира',
+   f.temporalConflict===true&&!f.forceNewHand);
+  f=newDeal.observe(freshScene(),2300);
+  check('Три еднакви нови кадъра потвърждават новото раздаване',
+   f.forceNewHand===true&&f.hero[0].code==='Qc'&&f.board[1].code==='As');
+  var sameBoard=mod.createTracker();
+  sameBoard.observe(screenshot(),100);sameBoard.observe(screenshot(),650);
+  var oneHeroMistake=screenshot();oneHeroMistake.hero[1]=card('3','s','3s',220);
+  f=sameBoard.observe(oneHeroMistake,1200);
+  check('Една грешка при същия борд не е ново раздаване',
+   !f.forceNewHand&&f.temporalConflict);
+
   return checks;
  }
  document.getElementById('run').addEventListener('click',function(){
