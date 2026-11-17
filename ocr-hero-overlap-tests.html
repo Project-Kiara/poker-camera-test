@@ -1,0 +1,83 @@
+<!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OCR тест: лични карти до аватара</title>
+<style>body{max-width:750px;margin:18px auto;padding:0 14px;background:#101928;color:#eef7ff;font:15px/1.45 system-ui}
+h1{font-size:21px}button{padding:12px 16px;border:0;border-radius:8px;background:#64dfb6;color:#093a30;font-weight:bold}
+p{color:#c1d1e2}a{color:#a1d9ff}li{padding:7px;border-bottom:1px solid #35465b}.good{color:#75edaa}.bad{color:#ff8f9e}
+</style></head><body><h1>Лични карти, аватар и размазване</h1>
+<p>Проверява дали две близки лични карти се намират и разчитат, когато аватарът закрива долната им част и ъгловите символи са леко размазани. Използва синтетично нарисувани образци; реалното фотографско разпознаване се проверява отделно.</p>
+<button id="start" type="button">Пусни тестовете</button>
+<p id="result" role="status">Тестът не е стартиран.</p><ol id="checks"></ol>
+<p><a href="./">Назад към камерата</a> · <a href="./ocr-photo-mask-test.html?v=r27">OCR снимани символи</a></p>
+<script src="./card-detector.js?v=merged-hero-r11"></script>
+<script src="./acr-template-bank.js?v=packed-r20"></script>
+<script src="./acr-vision.js?v=hero-corner-r27"></script>
+<script>
+(function(){
+'use strict';
+var W=260,H=456,top=317,cardW=72,cardH=117,lefts=[55,130];
+function fixture(codes,blur){
+ var data=new Uint8ClampedArray(W*H*4),i;
+ for(i=0;i<W*H;i++){data[4*i]=26;data[4*i+1]=85;data[4*i+2]=45;data[4*i+3]=255;}
+ var templates=ACRVision.templates();
+ for(var k=0;k<codes.length;k++){
+  var x0=lefts[k],suit=codes[k].slice(-1),rank=codes[k].slice(0,-1);
+  for(var y=top;y<top+cardH;y++)for(var x=x0;x<x0+cardW;x++){
+   var p=(y*W+x)*4;data[p]=239;data[p+1]=240;data[p+2]=239;
+  }
+  function ink(kind,key,dx,dy,ww,hh,color){
+   var e=templates[kind].filter(function(x){return x.key===key&&x.provenance==='acr';})[0];
+   if(!e)throw Error('Липсва символ '+key);
+   for(var yy=0;yy<hh;yy++)for(var xx=0;xx<ww;xx++){
+    if(!e.mask[Math.floor(yy*24/hh)*24+Math.floor(xx*24/ww)])continue;
+    var pos=((top+dy+yy)*W+x0+dx+xx)*4;
+    for(var c=0;c<3;c++)data[pos+c]=color[c];
+   }
+  }
+  var color=(suit==='h'||suit==='d')?[165,66,74]:[58,62,64];
+  ink('rank',rank,7,8,rank==='10'?32:25,30,color);
+  ink('suit',suit,7,39,23,24,color);
+ }
+ // Seat avatar: only the lower portions of the two cards are covered.
+ for(var ay=top+96;ay<top+cardH+15;ay++)for(var ax=104;ax<155;ax++){
+  if((ax-129)*(ax-129)/(27*27)+(ay-top-112)*(ay-top-112)/(20*20)>1)continue;
+  var addr=(ay*W+ax)*4;data[addr]=184;data[addr+1]=170;data[addr+2]=161;
+ }
+ if(blur){
+  var copied=data.slice();
+  for(var by=top+4;by<top+70;by++)for(var bx=60;bx<208;bx++){
+   if(!(lefts.some(function(px){return bx>=px+4&&bx<px+47;})))continue;
+   var index=(by*W+bx)*4;
+   for(var channel=0;channel<3;channel++){
+    var sum=0;
+    for(var yoff=-1;yoff<=1;yoff++)for(var xoff=-1;xoff<=1;xoff++)
+     sum+=copied[((by+yoff)*W+bx+xoff)*4+channel];
+    data[index+channel]=Math.round(copied[index+channel]*(1-blur)+(sum/9)*blur);
+   }
+  }
+ }
+ return {width:W,height:H,data:data};
+}
+function run(){
+ var tests=[],scenes=[['4s','10s'],['4d','9h']];
+ function check(label,pass){tests.push({label:label,pass:pass});}
+ for(var k=0;k<scenes.length;k++)for(var z=0;z<3;z++){
+  var strength=[0,.65,.9][z],frame=fixture(scenes[k],strength);
+  var result=ACRVision.analyze(frame);
+  check(scenes[k].join(' ')+' | размазване '+strength+
+   ': две лични карти, правилни стойности',
+   result.hero.length===2&&result.board.length===0&&
+    result.hero[0].code===scenes[k][0]&&result.hero[1].code===scenes[k][1]&&
+    result.uniqueCards);
+ }
+ return tests;
+}
+document.getElementById('start').addEventListener('click',function(){
+ var tests=run(),out=document.getElementById('checks');out.textContent='';
+ tests.forEach(function(t){var li=document.createElement('li');li.textContent=(t.pass?'✓ ':'✗ ')+t.label;
+  li.className=t.pass?'good':'bad';out.appendChild(li);});
+ var passed=tests.filter(function(t){return t.pass;}).length;
+ document.getElementById('result').textContent=passed+'/'+tests.length+
+ ' синтетични проверки; за реална оценка е необходим тест с камера.';
+});
+})();
+</script></body></html>
