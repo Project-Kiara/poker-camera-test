@@ -31,6 +31,11 @@
     // A bad frame is not evidence of a new hand; retain internal memory, but
     // do not emit a completed board from this untrusted frame.
     if(result)result.boardComplete=false;
+    // Never combine evidence separated by an untrusted/ambiguous frame.
+    // Completed locks survive, but partial votes are invalidated.
+    ['board','hero'].forEach(function(kind){slots[kind].forEach(function(t){
+      if(t)t.samples=[];
+    });});
     return result;
    }
    var board=result.board||[],hero=result.hero||[];
@@ -120,7 +125,9 @@
         card.temporal=true;card.remembered=true;
         card.reason='Запомнена карта от същата позиция в раздаването';
        }
-       tr.lockedAt=now;
+       // A remembered placeholder must not extend the time-to-live of
+       // its own evidence. Only a fresh complete OCR reading does that.
+       if(code===tr.locked)tr.lockedAt=now;
       }
       return;
      }
