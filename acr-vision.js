@@ -277,10 +277,10 @@ function selectGlyph(img,box,part){
   else if(chosen)chosen.accepted=false;
  }
  if(!chosen||!chosen.accepted){
-  var alternate=fallbackGlyph(img,box,part);
-  if(alternate&&(!box.shaded||alternate.count>=2))return alternate;
   var adjusted=variantGlyph(img,box,part);
   if(adjusted&&(!box.shaded||adjusted.count>=2))return adjusted;
+  var alternate=fallbackGlyph(img,box,part);
+  if(alternate&&(!box.shaded||alternate.count>=2))return alternate;
  }
  return chosen;
 }
