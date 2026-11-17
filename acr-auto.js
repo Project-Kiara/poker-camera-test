@@ -405,9 +405,10 @@
  }
  file.addEventListener('change',function(){processImageInput(file);});
  nativeFile.addEventListener('change',function(){processImageInput(nativeFile);});
+ var nextVisionDelay=350;
  function tick(){
   captureButton.disabled=!(video.readyState>=2&&video.videoWidth&&!video.paused);
-  if(frameWorking){setTimeout(tick,650);return;}
+  if(frameWorking){setTimeout(tick,350);return;}
   if(video.readyState>=2&&video.videoWidth&&!video.paused){
    frameWorking=true;
    try{
@@ -431,9 +432,13 @@
      if(accept&&lastApplied!==signature){applyResult(result);lastApplied=signature;}
     }
    }catch(err){status.textContent='Грешка при разпознаване: '+err.message;}
+   // Keep OCR responsive when frames are inexpensive, but leave breathing
+   // room for the camera on older iPhones when recognition is expensive.
+   var elapsed=Date.now()-startedAt;
+   nextVisionDelay=Math.max(350,Math.min(950,Math.round(elapsed*1.8)));
    frameWorking=false;
   }
-  setTimeout(tick,650);
+  setTimeout(tick,nextVisionDelay);
  }
- setTimeout(tick,650);
+ setTimeout(tick,350);
 })();
