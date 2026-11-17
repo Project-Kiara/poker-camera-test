@@ -101,6 +101,55 @@
       #autoRecognition .reading-summary p{font-size:11px!important;}
     }
 
+
+    /* Immersive iPhone 7 Plus layout: one camera control, responsive video HUD. */
+    html, body { min-height:100%; overflow-x:hidden; }
+    .main { max-width:960px; padding: max(5px,env(safe-area-inset-top)) 7px max(7px,env(safe-area-inset-bottom)); }
+    h1 { font-size:18px; margin:0 0 2px; }
+    .subtitle { font-size:10px; margin:0 0 5px; }
+    .camera-layout { display:block; }
+    .camera-layout .preview {
+      width:100%;max-width:none;aspect-ratio:auto;
+      height:calc(100vh - 94px);height:calc(100dvh - 94px);
+      min-height:280px;max-height:980px;border-radius:12px;position:relative;
+    }
+    .camera-layout video { width:100%;height:100%;object-fit:contain; }
+    .camera-layout .placeholder {font-size:14px;padding:25px 48px; }
+    #cardOverlay {position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;}
+    .live-hud {position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;z-index:2;pointer-events:none;padding:9px 9px 10px;gap:12px;}
+    .live-hud-top {align-self:flex-start;max-width:calc(100% - 115px);min-width:130px;}
+    .live-hud-top .reading-summary {background:rgba(6,15,28,.76);border:1px solid rgba(186,213,242,.2);padding:7px 9px;border-radius:10px;display:grid;gap:3px;}
+    .live-hud-top .reading-summary p {font-size:11px!important;line-height:1.28!important;margin:0!important;overflow-wrap:anywhere;}
+    .live-hud-top #visionHero {color:#6effb1!important;}
+    .live-hud-top #visionCards {color:#75c5ff!important;}
+    .live-hud-top #visionSeats {font-size:10px!important;color:#c3d3e3!important;}
+    .live-hud-top #visionStage {font-size:10px!important;}
+    .live-hud-top #visionStatus {background:rgba(6,15,28,.8);border-radius:8px;padding:5px 7px;font-size:10px;line-height:1.3;max-height:42px;overflow:hidden;}
+    .live-hud-bottom {width:100%;margin-top:auto;}
+    .live-hud-bottom .result-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:0;}
+    .live-hud-bottom .result-grid > div {background:rgba(10,25,42,.88);border:1px solid rgba(191,217,246,.18);border-radius:10px;padding:8px 3px;}
+    .live-hud-bottom .result-grid small {font-size:11px;}
+    .live-hud-bottom .result-grid strong {font-size:clamp(19px,5vw,28px);margin:3px 0;}
+    .camera-toggle {position:absolute;right:9px;top:9px;z-index:3;min-width:102px;min-height:44px;padding:8px 9px;font-size:12px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.44);}
+    .camera-state {font-size:10px;margin:4px 2px;min-height:16px;}
+    .camera-state #status {font-size:10px;min-width:0;}
+    .camera-state details {display:none;}
+    #analysisPanel[hidden] {display:none!important;}
+    .advanced-diagnostics {font-size:11px;margin-top:5px;color:#b8cee1;}
+    .advanced-diagnostics > summary {padding:4px 6px;cursor:pointer;}
+    .advanced-diagnostics #autoRecognition {margin:3px 0;padding:8px;}
+    .advanced-diagnostics #autoRecognition .reading-summary {display:none;}
+    .advanced-diagnostics #autoRecognition #probabilityMount {display:none;}
+    .advanced-diagnostics #autoRecognition h2 {font-size:14px;}
+    .advanced-diagnostics #autoRecognition .capture-actions {display:grid;grid-template-columns:1fr 1fr;}
+    .advanced-diagnostics #autoRecognition .capture-actions button {min-height:34px;}
+    .foot {font-size:10px;margin-top:4px;}
+    @media (orientation:landscape) {
+      .camera-layout .preview {height:calc(100vh - 72px);height:calc(100dvh - 72px);}
+      .live-hud-top .reading-summary {max-width:360px;}
+      .live-hud-bottom {max-width:440px;align-self:flex-end;}
+    }
+
   </style>
 </head>
 <body>
@@ -109,14 +158,14 @@
     <p class="subtitle">Карти и вероятности · ACR Poker</p>
     <div class="camera-layout">
       <div class="preview" id="preview">
-      <video id="camera" autoplay muted playsinline webkit-playsinline></video>
-      <div class="placeholder">Натисни „Включи камерата“, за да видиш картината тук.</div>
-    </div>
-      <div class="buttons" aria-label="Управление на камерата">
-        <button id="start" class="start">Включи камера</button>
-        <button id="stop" class="stop" disabled>Спри камера</button>
-        <button id="flip" class="secondary" disabled>Смени камера</button>
-        <button id="measure" class="secondary" disabled>Провери кадъра</button>
+        <video id="camera" autoplay muted playsinline webkit-playsinline></video>
+        <canvas id="cardOverlay" aria-hidden="true"></canvas>
+        <div class="placeholder">Натисни „Включи камерата“, за да започне автоматичното разпознаване.</div>
+        <div id="liveHud" class="live-hud" aria-label="Автоматично разпознати карти и вероятности">
+          <div id="hudTop" class="live-hud-top"></div>
+          <div id="hudBottom" class="live-hud-bottom"></div>
+        </div>
+        <button type="button" id="cameraToggle" class="camera-toggle start" aria-pressed="false">▶ Включи камерата</button>
       </div>
     </div>
     <div class="camera-state" aria-live="polite">
@@ -177,117 +226,72 @@
       'use strict';
       var video = document.getElementById('camera');
       var preview = document.getElementById('preview');
-      var startButton = document.getElementById('start');
-      var stopButton = document.getElementById('stop');
-      var flipButton = document.getElementById('flip');
-      var measureButton = document.getElementById('measure');
+      var toggle = document.getElementById('cameraToggle');
       var status = document.getElementById('status');
       var details = document.getElementById('details');
-      var stream = null;
-      var facing = 'environment';
-      var busy = false;
-
-      function setStatus(message, kind) {
+      var stream = null, busy = false;
+      function setStatus(message,kind) {
         status.textContent = 'Състояние: ' + message;
-        status.setAttribute('data-kind', kind || '');
+        status.setAttribute('data-kind',kind||'');
       }
-      function refreshButtons() {
-        startButton.disabled = busy || !!stream;
-        stopButton.disabled = busy || !stream;
-        flipButton.disabled = busy || !stream;
-        measureButton.disabled = busy || !stream;
+      function updateToggle() {
+        toggle.disabled=busy;
+        toggle.textContent=stream?'■ Спри камерата':'▶ Включи камерата';
+        toggle.className='camera-toggle '+(stream?'stop':'start');
+        toggle.setAttribute('aria-pressed',stream?'true':'false');
       }
       function stopCamera() {
-        if (stream) {
-          stream.getTracks().forEach(function (track) { track.stop(); });
-        }
-        stream = null;
-        video.pause();
-        video.srcObject = null;
+        if(stream)stream.getTracks().forEach(function(t){t.stop();});
+        stream=null;
+        try{video.pause();}catch(_){}
+        video.srcObject=null;
         preview.classList.remove('active');
-        setStatus('камерата е спряна', '');
-        details.textContent = 'Не се съхраняват снимки или видео.';
-        refreshButtons();
+        setStatus('камерата е спряна','');
+        details.textContent='Камерата е изключена. Не се записва видео.';
+        document.dispatchEvent(new Event('poker:camera-stopped'));
+        updateToggle();
       }
-      function describeError(e) {
-        var n = (e && e.name) || '';
-        if (n === 'NotAllowedError' || n === 'PermissionDeniedError') return 'Достъпът е отказан. В Safari разреши камерата за този сайт и опитай отново.';
-        if (n === 'NotFoundError' || n === 'DevicesNotFoundError') return 'Safari не намира работеща камера.';
-        if (n === 'NotReadableError' || n === 'TrackStartError') return 'Камерата е заета или не може да бъде стартирана. Затвори други приложения, които я използват.';
-        if (n === 'OverconstrainedError') return 'Избраната камера не поддържа тези настройки.';
-        if (n === 'SecurityError') return 'Браузърът блокира камерата по съображения за сигурност.';
-        return 'Камерата не се стартира (' + (n || 'неизвестна грешка') + ').';
+      function describeError(e){
+        var n=e&&e.name||'';
+        if(n==='NotAllowedError'||n==='PermissionDeniedError')return 'Safari няма разрешение за камерата. Разреши достъпа за този сайт.';
+        if(n==='NotFoundError'||n==='DevicesNotFoundError')return 'Не е намерена работеща камера.';
+        if(n==='NotReadableError'||n==='TrackStartError')return 'Камерата е заета от друго приложение.';
+        if(n==='OverconstrainedError')return 'Камерата не поддържа заявения режим.';
+        if(n==='SecurityError')return 'Камерата е блокирана от браузъра.';
+        return 'Камерата не може да стартира ('+(n||'неизвестна грешка')+').';
       }
-      async function startCamera() {
-        if (busy) return;
-        if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          setStatus('камерата не е достъпна', 'error');
-          details.textContent = 'Отвори публикуваната страница през HTTPS директно в Safari.';
-          return;
+      async function startCamera(){
+        if(busy||stream)return;
+        if(!window.isSecureContext||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+          setStatus('необходим е HTTPS и Safari с достъп до камерата','error');return;
         }
-        busy = true;
-        refreshButtons();
-        setStatus('изчаква разрешение от Safari', '');
+        busy=true;updateToggle();setStatus('изчаквам разрешение от Safari','');
         try {
-          // No microphone access is requested.
-          // Prefer the highest 4K rear-camera video mode supported by iPhone 7 Plus.
-          // Ideal constraints let Safari fall back instead of failing.
-          var targetWidth = facing === 'environment' ? 3840 : 1920;
-          var targetHeight = facing === 'environment' ? 2160 : 1080;
-          var requested = { audio: false, video: {
-            facingMode: { ideal: facing },
-            width: { ideal: targetWidth }, height: { ideal: targetHeight },
-            frameRate: { ideal: 30 }, aspectRatio: { ideal: 16 / 9 }
-          } };
-          stream = await navigator.mediaDevices.getUserMedia(requested);
-          video.srcObject = stream;
-          try { await video.play(); } catch (_) { /* Some Safari versions play on metadata. */ }
+          // Request the highest useful rear-video resolution; Safari can choose a lower mode.
+          // Never request microphone access. OCR uses original frame pixels, not CSS preview size.
+          stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{
+            facingMode:{ideal:'environment'},
+            width:{ideal:3840},height:{ideal:2160},frameRate:{ideal:30}
+          }});
+          video.srcObject=stream;
+          try{await video.play();}catch(_){}
           preview.classList.add('active');
-          setStatus('камерата работи', 'ok');
-          var activeTrack = stream.getVideoTracks()[0];
-          var settings = activeTrack && typeof activeTrack.getSettings === 'function' ? activeTrack.getSettings() : {};
-          var actualW = settings.width || video.videoWidth;
-          var actualH = settings.height || video.videoHeight;
-          details.textContent = 'Камера: ' + (facing === 'environment' ? 'задна' : 'предна') +
-            '. Заявена видео резолюция: ' + targetWidth + ' × ' + targetHeight +
-            '. Реална видео резолюция от Safari: ' + (actualW && actualH ? actualW + ' × ' + actualH : 'изчаква се') +
-            '. За пълна 12 MP фотография използвай бутона „Пълна снимка“.';
-        } catch (error) {
-          if (stream) stream.getTracks().forEach(function (track) { track.stop(); });
-          stream = null;
-          video.srcObject = null;
-          preview.classList.remove('active');
-          setStatus('грешка', 'error');
-          details.textContent = describeError(error);
-        } finally {
-          busy = false;
-          refreshButtons();
-        }
+          setStatus('камерата работи · разпознавам автоматично','ok');
+          var track=stream.getVideoTracks()[0];
+          var settings=track&&typeof track.getSettings==='function'?track.getSettings():{};
+          var w=settings.width||video.videoWidth,h=settings.height||video.videoHeight;
+          details.textContent='Реална резолюция: '+(w&&h?w+' × '+h:'изчаква се')+
+            '. Видео режимът зависи от Safari; изображението се обработва локално.';
+          document.dispatchEvent(new Event('poker:camera-started'));
+        }catch(err){
+          if(stream)stream.getTracks().forEach(function(t){t.stop();});
+          stream=null;video.srcObject=null;preview.classList.remove('active');
+          setStatus(describeError(err),'error');
+        }finally{busy=false;updateToggle();}
       }
-      startButton.addEventListener('click', startCamera);
-      stopButton.addEventListener('click', stopCamera);
-      flipButton.addEventListener('click', function () {
-        if (!stream) return;
-        stopCamera();
-        facing = facing === 'environment' ? 'user' : 'environment';
-        startCamera();
-      });
-      measureButton.addEventListener('click', function () {
-        if (!stream) return;
-        var currentTrack = stream.getVideoTracks()[0];
-        var actualSettings = currentTrack && typeof currentTrack.getSettings === 'function' ? currentTrack.getSettings() : {};
-        var w = actualSettings.width || video.videoWidth, h = actualSettings.height || video.videoHeight;
-        if (w && h) {
-          details.textContent = 'Реална видео резолюция: ' + w + ' × ' + h +
-            ' (' + (w*h/1000000).toFixed(1) + ' MP). Камера: ' +
-            (facing === 'environment' ? 'задна' : 'предна') +
-            '. Максимумът на задния видео режим е 4K (3840 × 2160), но Safari може да ограничи резолюцията. Няма запис или изпращане на видео.';
-        } else {
-          details.textContent = 'Камерата е включена, но Safari още не е предоставил размерите на кадъра.';
-        }
-      });
-      window.addEventListener('pagehide', function () { if (stream) stopCamera(); });
-      refreshButtons();
+      toggle.addEventListener('click',function(){if(busy)return;if(stream)stopCamera();else startCamera();});
+      window.addEventListener('pagehide',function(){if(stream)stopCamera();});
+      updateToggle();
     })();
   </script>
 
@@ -476,6 +480,7 @@
   </script>
 <script src="./card-detector.js?v=merged-hero-r11"></script>
   <script src="./acr-vision.js?v=dual-deck-photo-r12"></script>
-  <script src="./acr-auto.js?v=dual-deck-photo-r12"></script>
+  <script src="./acr-auto.js?v=immersive-r13"></script>
+  <script src="./camera-hud.js?v=immersive-r13"></script>
 </body>
 </html>
