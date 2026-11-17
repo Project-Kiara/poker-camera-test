@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ACR — тест на многокадрово разпознаване</title>
+<style>
+body{max-width:760px;margin:20px auto;padding:0 14px;font:15px/1.45 -apple-system,BlinkMacSystemFont,sans-serif;background:#101927;color:#f3f7fc}
+button{background:#59dfb1;color:#052719;padding:11px 18px;border:0;border-radius:8px;font:700 15px sans-serif}
+p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7}.bad{color:#ff99ab}a{color:#a4d5ff}
+</style></head>
+<body><h1>Многокадрово разпознаване</h1>
+<p>Тестовете проверяват събирането на частично прочетени стойности и бои от последователни кадри, защитата от смесване на различни раздавания и забраната за дописване на нечетливи карти. Не проверяват оптичната точност върху реални снимки.</p>
+<button id="run" type="button">Пусни проверките</button>
+<p id="summary" role="status">Готов за тест.</p><ol id="list"></ol>
+<p><a href="./">Към камерата</a> · <a href="./ocr-library-tests.html?v=r19">Тест на 52 карти</a></p>
+<script src="./acr-temporal.js?v=consensus-r19"></script>
+<script>
+(function(){
+ 'use strict';
+ var mod=window.ACRTemporal,summary=document.getElementById('summary'),list=document.getElementById('list');
+ function card(rank,suit,code,x,reason){
+  return {rank:rank||null,suit:suit||null,code:code||null,
+   reason:reason||'',box:{x:x==null?100:x,y:600,width:88,height:140}};
+ }
+ function frame(hero,board,stage,confirmed){
+  return {hero:hero||[],board:board||[],stage:stage||'Префлоп',
+   stageConfirmed:confirmed!==false,uniqueCards:true,boardComplete:false};
+ }
+ function run(){
+  var checks=[];
+  function check(label,valid){checks.push({label:label,valid:!!valid});}
+  var t=mod.createTracker(),f;
+  f=t.observe(frame([card('A',null)]),100);
+  check('Само стойност не е достатъчна',f.hero[0].code===null);
+  f=t.observe(frame([card(null,'s')]),700);
+  check('Само боя не е достатъчна',f.hero[0].code===null);
+  f=t.observe(frame([card('A',null)]),1300);
+  check('След третия кадър още няма две бои',f.hero[0].code===null);
+  f=t.observe(frame([card(null,'s')]),1900);
+  check('Две независими разчитания на всеки символ',f.hero[0].code==='As'&&f.hero[0].temporal);
+  f=t.observe(frame([card('K',null)]),2500);
+  check('Смяна на стойността изхвърля старата памет',f.hero[0].code===null);
+  f=t.observe(frame([card('K','s',null,100,'Несъответствие между цвят и боя')]),3100);
+  check('Невалиден цвят не може да бъде заобиколен',f.hero[0].code===null);
+  t.reset();
+  f=t.observe(frame([card(null,null)]),3500);
+  check('Без разчетени символи не се гадае',f.hero[0].code===null);
+  f=t.observe(frame([card('8','d','8d')]),4100);
+  check('Пълна OCR карта остава непроменена',f.hero[0].code==='8d');
+  f=t.observe(frame([card(null,'d')]),7401);
+  check('Изтекло наблюдение не запазва старата карта',f.hero[0].code===null);
+  t.reset();
+  [card('Q',null),card(null,'h'),card('Q',null)].forEach(function(c,i){
+   t.observe(frame([c]),i*500+10);
+  });
+  f=t.observe(frame([card(null,'h')]),1600);
+  check('Може да се възстанови карта след reset',f.hero[0].code==='Qh');
+  f=t.observe(frame([card(null,'h',null,500)]),1800);
+  check('Друга позиция не наследява разпознаването',f.hero[0].code===null);
+  t.reset();
+  t.observe(frame([card('A',null)]),1);
+  t.observe(frame([card(null,'h')]),500);
+  f=t.observe(frame([card(null,null)],[],null,false),1000);
+  check('Непотвърден етап нулира временната памет',f.hero[0].code===null);
+  f=t.observe(frame([card('A',null)]),1500);
+  f=t.observe(frame([card(null,'h')]),1900);
+  check('Не се събира история през непотвърден етап',f.hero[0].code===null);
+  t.reset();
+  var board=[card('A',null,null,50),card('K','h','Kh',150),card('Q','s','Qs',250)];
+  t.observe(frame([],board,'Флоп'),1);
+  board=[card(null,'c',null,50),card('K','h','Kh',150),card('Q','s','Qs',250)];
+  t.observe(frame([],board,'Флоп'),400);
+  board=[card('A',null,null,50),card('K','h','Kh',150),card('Q','s','Qs',250)];
+  t.observe(frame([],board,'Флоп'),800);
+  board=[card(null,'c',null,50),card('K','h','Kh',150),card('Q','s','Qs',250)];
+  f=t.observe(frame([],board,'Флоп'),1200);
+  check('Три общи карти позволяват проверен борд',f.boardComplete===true&&f.board[0].code==='Ac');
+  t.reset();
+  var h=[card('A','s','As',100)],b=[card('A',null,null,50),card('K','h','Kh',150),card('Q','s','Qs',250)];
+  t.observe(frame(h,b,'Флоп'),1);
+  t.observe(frame(h,[card(null,'s',null,50),b[1],b[2]],'Флоп'),400);
+  t.observe(frame(h,b,'Флоп'),800);
+  f=t.observe(frame(h,[card(null,'s',null,50),b[1],b[2]],'Флоп'),1200);
+  check('Дублиране с лична карта блокира допълването',f.board[0].code===null&&f.uniqueCards);
+  t.reset();
+  f=t.observe(frame([card(null,null),card(null,null,220)]),1);
+  check('Празните две лични карти остават празни',f.hero.every(function(x){return !x.code;}));
+  return checks;
+ }
+ document.getElementById('run').addEventListener('click',function(){
+  var checks=run();list.textContent='';
+  checks.forEach(function(x){var li=document.createElement('li');li.className=x.valid?'ok':'bad';
+   li.textContent=(x.valid?'✓ ':'✗ ')+x.label;list.appendChild(li);});
+  var passes=checks.filter(function(x){return x.valid;}).length;
+  summary.textContent=passes+'/'+checks.length+' проверки — '+(checks.length-passes)+' неуспешни.';
+ });
+})();
+</script></body></html>
