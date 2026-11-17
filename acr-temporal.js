@@ -57,21 +57,35 @@
      hero.every(function(c,i){return slots.hero[i]&&slots.hero[i].locked&&
        c.code!==slots.hero[i].locked;});
    var newFullBoard=recognizedBoard===3&&board.length>=3;
+   var oldBoardSize=slots.board.filter(function(x){return x&&x.locked;}).length;
    var lateDeal=ownChanges&&newFullBoard&&
-      (boardChanged>=2||slots.board.filter(function(x){return x&&x.locked;}).length<2);
+      (boardChanged>=2||oldBoardSize<2);
    var preflop=result.stage==='Префлоп'&&board.length===0;
+   // A new board may become visible before both personal cards become
+   // legible. Otherwise one obscured corner can lock the old deal forever.
+   var anyNewHero=hero.some(function(c,i){
+    return validCode(c.code)&&slots.hero[i]&&slots.hero[i].locked&&
+      c.code!==slots.hero[i].locked;
+   });
+   var newBoardOnly=newFullBoard&&oldBoardSize>=3&&boardChanged>=2&&
+      (anyNewHero||board.length<oldBoardSize||boardChanged===3);
+   var missingOldCommunity=oldBoardSize>=4&&board.length>=3&&
+      board.length<oldBoardSize&&!newBoardOnly;
    // When the camera missed the old flop/river, both deals can appear as
    // consecutive preflops. Previously the old hero was locked forever:
    // every correctly read new hero was discarded as a contradiction.
    var preflopReplacement=preflop&&stage==='Префлоп'&&
       ownChanges&&hero.length===2&&hero.every(function(c){return validCode(c.code);});
-   if(lateDeal||preflopReplacement){
-    var signature=(preflopReplacement?'P:':'B:')+rawHero+
-      '|'+(lateDeal?board.slice(0,3).map(function(c){return c.code;}).join('|'):'');
+   if(lateDeal||preflopReplacement||newBoardOnly){
+    var signature=(preflopReplacement?'P:':'B:')+
+      (rawHero||hero.map(function(c){return validCode(c.code)?c.code:'?';}).join('|'))+
+      '|'+(preflopReplacement?'':board.slice(0,3).map(function(c){return c.code;}).join('|'));
     newCandidateFrames=signature===newCandidate?newCandidateFrames+1:1;
     newCandidate=signature;
     result.temporalPending=newCandidateFrames;
-    if(newCandidateFrames>=3){
+    // Without two confirmed personal cards require stronger board evidence.
+    var requiredFrames=newBoardOnly&&!rawHero&&board.length>=oldBoardSize?4:3;
+    if(newCandidateFrames>=requiredFrames){
      // The new OCR identity has independently persisted for 3 frames;
      // reset both card slots and the deal memory as one transition.
      reset();
@@ -89,6 +103,14 @@
      return result;
     }
    }else{newCandidate='';newCandidateFrames=0;}
+   if(missingOldCommunity){
+    // The previously confirmed turn/river cannot become a flop merely
+    // because its last card escaped a single frame's rectangle detector.
+    result.temporalConflict=true;
+    result.temporalReason='missing-board-card';
+    result.boardComplete=false;
+    return result;
+   }
    // Preflop following a street is a potential new hand. Do not carry locked
    // board/hero cards over that boundary, but require repeated observations.
    if(preflop&&stage&&stage!=='Префлоп'&&hero.length===2){
