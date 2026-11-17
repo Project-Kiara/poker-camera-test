@@ -81,7 +81,7 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
   f=t.observe(frame(h,[card(null,'s',null,50),b[1],b[2]],'Флоп'),1200);
   check('Дублиране с лична карта блокира допълването',f.board[0].code===null&&f.uniqueCards);
   t.reset();
-  f=t.observe(frame([card(null,null),card(null,null,220)]),1);
+  f=t.observe(frame([card(null,null),card(null,null,null,220)]),1);
   check('Празните две лични карти остават празни',f.hero.every(function(x){return !x.code;}));
   return checks;
  }
