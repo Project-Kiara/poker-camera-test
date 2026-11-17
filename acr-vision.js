@@ -255,8 +255,15 @@ function selectGlyph(img,box,part){
   var matched=matchSymbol(pixels.mask,kind);
   if(!matched.first)continue;
   var gap=matched.first.score-(matched.second?matched.second.score:0);
-  var accepted=matched.first.score>=(part==='rank'?.68:.71)&&
-       gap>=(part==='rank'?.043:.055);
+  // In photographed ACR decks, the narrow two-digit 10 often loses
+  // anti-aliased edge pixels. Permit a narrowly-scoped lower similarity
+  // only when the top OCR candidate is already "10", has a large margin,
+  // and matches a calibrated ACR silhouette.
+  var tenEvidence=kind==='rank'&&matched.first.key==='10'&&
+       matched.first.provenance==='acr'&&
+       matched.first.score>=.63&&gap>=.21;
+  var accepted=(matched.first.score>=(part==='rank'?.68:.71)&&
+       gap>=(part==='rank'?.043:.055))||tenEvidence;
   var candidate={key:matched.first.key,score:matched.first.score,
     margin:gap,accepted:accepted,isRed:pixels.isRed,inkColor:pixels.inkColor,variant:v,
     source:matched.first.provenance||'unknown'};
