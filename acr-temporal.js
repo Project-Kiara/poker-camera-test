@@ -59,21 +59,38 @@
    var newFullBoard=recognizedBoard===3&&board.length>=3;
    var lateDeal=ownChanges&&newFullBoard&&
       (boardChanged>=2||slots.board.filter(function(x){return x&&x.locked;}).length<2);
-   if(lateDeal){
-    var signature=rawHero+'|'+board.slice(0,3).map(function(c){return c.code;}).join('|');
+   var preflop=result.stage==='Префлоп'&&board.length===0;
+   // When the camera missed the old flop/river, both deals can appear as
+   // consecutive preflops. Previously the old hero was locked forever:
+   // every correctly read new hero was discarded as a contradiction.
+   var preflopReplacement=preflop&&stage==='Префлоп'&&
+      ownChanges&&hero.length===2&&hero.every(function(c){return validCode(c.code);});
+   if(lateDeal||preflopReplacement){
+    var signature=(preflopReplacement?'P:':'B:')+rawHero+
+      '|'+(lateDeal?board.slice(0,3).map(function(c){return c.code;}).join('|'):'');
     newCandidateFrames=signature===newCandidate?newCandidateFrames+1:1;
     newCandidate=signature;
-    result.temporalConflict=true;
     result.temporalPending=newCandidateFrames;
     if(newCandidateFrames>=3){
+     // The new OCR identity has independently persisted for 3 frames;
+     // reset both card slots and the deal memory as one transition.
      reset();
      result.forceNewHand=true;
      result.temporalConflict=false;
+    }else{
+     // Do not present the tentative cards as confirmed, and do not
+     // overwrite any old slot while the new deal is being verified.
+     hero.forEach(function(card){
+      if(validCode(card.code)){card.pendingCode=card.code;card.code=null;}
+     });
+     result.temporalConflict=true;
+     result.boardComplete=false;
+     result.temporalReason='new-deal-candidate';
+     return result;
     }
    }else{newCandidate='';newCandidateFrames=0;}
    // Preflop following a street is a potential new hand. Do not carry locked
    // board/hero cards over that boundary, but require repeated observations.
-   var preflop=result.stage==='Префлоп'&&board.length===0;
    if(preflop&&stage&&stage!=='Префлоп'&&hero.length===2){
     preflopFrames++;
     result.temporalPending=preflopFrames;
