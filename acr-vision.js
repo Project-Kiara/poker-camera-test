@@ -86,10 +86,15 @@ function cardLibrary(){var b=variantBank();return b?b.overview():null;}
 function glyphMask(img,box,part,variant){
  // Try slightly different corner crops only when the standard crop is uncertain.
  // All variants remain inside the rank/small-suit corner, never the big suit art.
+ // Normal calibrated geometry remains unchanged. The adaptive recovery
+ // reads only the unobstructed upper-left corner, never the seat avatar.
+ var adaptive=variant>=3;
  var cuts=part==='rank'?
-  [[.09,.56,.06,.285],[.06,.58,.04,.305],[.11,.60,.045,.30]]:
-  [[.07,.50,.315,.55],[.055,.52,.295,.565],[.09,.53,.325,.575]];
- var p=cuts[variant||0];
+  (adaptive?[[.06,.58,.05,.305],[.08,.62,.035,.305],[.09,.56,.065,.305]]:
+    [[.09,.56,.06,.285],[.06,.58,.04,.305],[.11,.60,.045,.30]]):
+  (adaptive?[[.06,.55,.295,.57],[.05,.57,.305,.58],[.08,.54,.31,.575]]:
+    [[.07,.50,.315,.55],[.055,.52,.295,.565],[.09,.53,.325,.575]]);
+ var p=cuts[(variant||0)%3];
  var x0=Math.max(0,Math.round(box.x+box.width*p[0])),
      x1=Math.min(img.width,Math.round(box.x+box.width*p[1]));
  var y0=Math.max(0,Math.round(box.y+box.height*p[2])),
@@ -107,13 +112,25 @@ function glyphMask(img,box,part,variant){
   running+=histogram[level];
   if(running>=target){background=level;break;}
  }
- var blackLimit=Math.min(145,Math.max(40,background-34));
+ // In an out-of-focus phone photo, an otherwise legible red 9 can
+ // exceed 145 brightness. Estimate a crop-relative ink/background split.
+ var darkAt=Math.max(1,Math.ceil(total*.10)),darkLevel=0,seen=0;
+ for(var ink=0;ink<256;ink++){
+  seen+=histogram[ink];if(seen>=darkAt){darkLevel=ink;break;}
+ }
+ var dynamic=darkLevel+(background-darkLevel)*.54;
+ var blackLimit=adaptive&&background-darkLevel>=28?
+   Math.max(80,Math.min(215,Math.round(dynamic))):
+   Math.min(145,Math.max(40,background-34));
  var src=new Uint8Array(w*h),redCount=0,blackCount=0,greenCount=0,blueCount=0;
  for(var y=0;y<h;y++)for(var x=0;x<w;x++){
   var i=((y+y0)*img.width+x+x0)*4,r=raw[i],g=raw[i+1],b=raw[i+2];
-  var red=r>76&&r>1.3*g&&r>1.2*b;
-  var blue=b>70&&b>1.28*r&&b>1.17*g&&r<175;
-  var green=g>65&&g>1.23*r&&g>1.14*b&&r<175;
+  var red=adaptive?(r>70&&r-g>=Math.max(20,r*.105)&&r-b>=Math.max(17,r*.092)):
+    (r>76&&r>1.3*g&&r>1.2*b);
+  var blue=adaptive?(b>65&&b-r>=Math.max(21,b*.10)&&b-g>=Math.max(15,b*.075)&&r<195):
+    (b>70&&b>1.28*r&&b>1.17*g&&r<175);
+  var green=adaptive?(g>60&&g-r>=Math.max(19,g*.09)&&g-b>=Math.max(15,g*.075)&&r<195):
+    (g>65&&g>1.23*r&&g>1.14*b&&r<175);
   var black=Math.max(r,g,b)<blackLimit;
   if(red||blue||green||black){
    src[y*w+x]=1;
@@ -122,9 +139,9 @@ function glyphMask(img,box,part,variant){
  }
  var palette=[{name:'red',count:redCount},{name:'blue',count:blueCount},
   {name:'green',count:greenCount}].sort(function(a,b){return b.count-a.count;});
- var tint=palette[0],strong=tint.count>=Math.max(6,blackCount*(box.shaded?.20:.85));
+ var tint=palette[0],strong=tint.count>=Math.max(6,blackCount*(adaptive?.26:(box.shaded?.20:.85)));
  return {mask:maskNormalize(src,w,h),inkColor:strong?tint.name:'black',
-  isRed:redCount>=8&&redCount>blackCount*(box.shaded?.09:1.2),
+  isRed:redCount>=6&&redCount>blackCount*(adaptive?.24:(box.shaded?.09:1.2)),
   count:redCount+blackCount+greenCount+blueCount};
 }
 function similarity(a,b){var common=0,all=0;for(var i=0;i<576;i++){if(a[i]||b[i]){all++;if(a[i]&&b[i])common++;}}return all?common/all:0;}
@@ -233,6 +250,38 @@ function variantGlyph(img,box,part){
  }
  return best;
 }
+// Extra OCR only when the usual calibrated pass is uncertain.
+// Compare several upper-corner crops; two must agree on the same symbol.
+function adaptiveGlyph(img,box,part){
+ var kind=part==='rank'?'rank':'suit';
+ var votes={},totals={},gaps={},best={};
+ for(var v=3;v<6;v++){
+  var pixels=glyphMask(img,box,part,v);
+  if(!pixels||!pixels.mask||pixels.count<8)continue;
+  var m=matchSymbol(pixels.mask,kind);
+  if(!m.first||!m.second)continue;
+  var score=m.first.score,margin=score-m.second.score;
+  if(score<(kind==='rank'?.59:.65)||margin<(kind==='rank'?.11:.10))continue;
+  var key=m.first.key;
+  votes[key]=(votes[key]||0)+1;
+  totals[key]=(totals[key]||0)+score;
+  gaps[key]=(gaps[key]||0)+margin;
+  if(!best[key]||score>best[key].score)best[key]={
+   key:key,score:score,margin:margin,accepted:true,
+   inkColor:pixels.inkColor,isRed:pixels.isRed,
+   source:'adaptive-corner',variant:v
+  };
+ }
+ var choice=null;
+ for(var key in votes){
+  var avg=totals[key]/votes[key],gap=gaps[key]/votes[key];
+  if(votes[key]<2||avg<(kind==='rank'?.62:.68)||gap<.12)continue;
+  if(!choice||votes[key]>choice.count||votes[key]===choice.count&&avg>choice.score){
+   choice=best[key];choice.count=votes[key];choice.score=avg;choice.margin=gap;
+  }
+ }
+ return choice;
+}
 function templateCoverage(){
  var base=templates(),secondary=fallbackTemplates('rank');
  var rank={},suit={},calibratedRank={},calibratedSuit={};
@@ -292,6 +341,8 @@ function selectGlyph(img,box,part){
   else if(chosen)chosen.accepted=false;
  }
  if(!chosen||!chosen.accepted){
+  var adapt=adaptiveGlyph(img,box,part);
+  if(adapt&&(!box.shaded||adapt.count>=2))return adapt;
   var adjusted=variantGlyph(img,box,part);
   if(adjusted&&(!box.shaded||adjusted.count>=2))return adjusted;
   var alternate=fallbackGlyph(img,box,part);
