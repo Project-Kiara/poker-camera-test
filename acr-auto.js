@@ -27,9 +27,9 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r17 · OCR r11 (лични карти и UI) · 17.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r18 · OCR r12 (52 карти + геометрични варианти) · 17.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
-  '<p class="hint"><a href="./ocr-selftest.html?v=r8">Тест на 52 синтетични карти</a> · <a href="./ocr-regression.html?v=r8">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r11">Тестове за личните карти и бутоните</a></p>',
+  '<p class="hint"><a href="./ocr-selftest.html?v=r18">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r18">Геометрична проверка на 52 карти</a> · <a href="./ocr-regression.html?v=r18">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r18">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
   '<label><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>',
   '<label><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label>',
@@ -53,7 +53,9 @@
  var coverage=vision.templateCoverage&&vision.templateCoverage();
  var coverageLabel=document.getElementById('ocrCoverage');
  if(coverageLabel&&coverage){
-  coverageLabel.textContent='OCR образци: '+coverage.ranks+'/13 стойности × '+coverage.suits+'/4 бои = '+coverage.combinations+'/52 комбинации. ACR калибрирани: '+coverage.calibratedRanks+'/13 стойности, '+coverage.calibratedSuits+'/4 бои. Останалите са резервни шрифтови образци.';
+  var library=vision.cardLibrary&&vision.cardLibrary();
+  coverageLabel.textContent='OCR образци: '+coverage.ranks+'/13 стойности × '+coverage.suits+'/4 бои = '+coverage.combinations+'/52 комбинации. ACR калибрирани символи: '+coverage.calibratedRanks+'/13 стойности, '+coverage.calibratedSuits+'/4 бои. Резервни шрифтови образци: да.'+
+   (library?' Вградена библиотека: '+library.cards+' комбинации; '+library.rankVariants+' варианти на стойности и '+library.suitVariants+' на бои. Не всички карти имат реални фотографски образци.':'');
  }
  // The calculator inputs stay mounted for the existing engine but the user
  // sees one combined auto-recognition + probability panel.
