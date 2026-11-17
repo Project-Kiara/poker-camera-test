@@ -360,7 +360,7 @@
     })();
   </script>
 
-  <script src="./poker-engine.js?v=adaptive-equity-r15"></script>
+  <script src="./poker-engine.js?v=adaptive-equity-r16"></script>
   <script src="./hand-tracker.js?v=deal-memory-r9"></script>
   <script src="./deal-bridge.js?v=deal-memory-r9"></script>
   <script>
@@ -476,8 +476,8 @@
       if (!result.exact && typeof result.equityMargin95 === 'number') {
         var low = Math.max(0,result.equity - result.equityMargin95);
         var high = Math.min(100,result.equity + result.equityMargin95);
-        addLine('Приблизителен 95% интервал за еквити',
-          pct(low)+' – '+pct(high)+' (само статистическа грешка)');
+        addLine('Консервативен 95% интервал за еквити',
+          pct(low)+' – '+pct(high)+' (само грешката от симулациите)');
       }
       if (result.exact)
         addLine('Точност', 'Без грешка от случайна извадка при приетия модел за неизвестните карти.');
