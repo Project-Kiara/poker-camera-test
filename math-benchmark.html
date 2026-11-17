@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Покер — измерване на изчислителната скорост</title>
+<style>
+:root {font:16px/1.5 -apple-system,BlinkMacSystemFont,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;padding:20px 14px 60px;background:#101927;color:#f2f7ff}
+main{max-width:740px;margin:auto}
+h1{font-size:22px;line-height:1.2}
+p,small{color:#c3d2e5}
+button{font:inherit;font-weight:700;padding:10px 16px;min-height:44px;border-radius:10px;border:0;background:#50d7a5;color:#092821;margin:4px 6px 4px 0}
+button:disabled{opacity:.4}
+#cancel{background:#324b63;color:#fff}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}
+th,td{padding:9px 5px;border-bottom:1px solid #34445d;text-align:left}
+th:nth-child(n+2),td:nth-child(n+2){text-align:right}
+#log{white-space:pre-wrap;overflow-wrap:anywhere;background:#1a2b3f;padding:12px;border-radius:10px}
+a{color:#8fd6ff}
+</style>
+</head>
+<body>
+<main>
+<h1>Измерване на изчислителната скорост</h1>
+<p>Изпълни теста директно на iPhone 7 Plus в Safari. Тестът не изпраща данни и измерва реалната скорост на JavaScript двигателя на устройството. Камерата не участва в този тест.</p>
+<button type="button" id="run">Измери скоростта</button>
+<button type="button" id="cancel" disabled>Спри</button>
+<p id="status" role="status">Не са изпълнявани тестове.</p>
+<table>
+<thead><tr><th>Сценарий</th><th>Раздавания</th><th>Време</th><th>За секунда</th></tr></thead>
+<tbody id="measurements"></tbody>
+</table>
+<p>„Точно“ означава, че всички сценарии от съответната задача са проверени. При Monte Carlo резултатите са оценки. Това измерване не означава, че всички над два милиарда префлоп сценария се проверяват в реално време.</p>
+<pre id="log" aria-label="Резултати за копиране">Резултатите ще се появят тук.</pre>
+<p><a href="./">Към камерата</a> · <a href="./hand-memory-tests.html?v=r17">Математически тестове</a></p>
+</main>
+<script src="./poker-engine.js?v=adaptive-equity-r16"></script>
+<script>
+(function(){
+ 'use strict';
+ var math=window.PokerMath;
+ var run=document.getElementById('run'),cancel=document.getElementById('cancel');
+ var status=document.getElementById('status'),rows=document.getElementById('measurements');
+ var log=document.getElementById('log'),serial=0;
+ var now=function(){return performance.now();};
+ function ids(str){return str.split(' ').map(math.idFromCode);}
+ var cases=[
+  {name:'Префлоп · 2 играчи',hero:'As Kh',board:'',players:2,iterations:5000},
+  {name:'Префлоп · 6 играчи',hero:'As Kh',board:'',players:6,iterations:5000},
+  {name:'Флоп · 2 играчи',hero:'As Kh',board:'2c 7d 9h',players:2,iterations:5000},
+  {name:'Търн · точно',hero:'As Ah',board:'2c 3d 4h 9s',players:2,iterations:1000},
+  {name:'Ривър · точно',hero:'As Ah',board:'2c 3d 4h 9s Js',players:2,iterations:1000}
+ ];
+ if(!math){status.textContent='Математическият модул не е достъпен.';run.disabled=true;return;}
+ cancel.onclick=function(){serial++;run.disabled=false;cancel.disabled=true;status.textContent='Измерването е спряно.';};
+ run.onclick=function(){
+  var my=++serial,index=0,records=[];
+  run.disabled=true;cancel.disabled=false;rows.textContent='';log.textContent='';
+  function nextCase(){
+   if(my!==serial)return;
+   if(index>=cases.length){
+    status.textContent='Готово — '+records.length+' измервания. Резултатите са само от този браузър.';
+    log.textContent=records.map(function(r){
+     return r.name+': '+r.done+' сценария, '+r.ms.toFixed(1)+' ms, '+
+      Math.round(r.speed)+'/сек, '+r.mode;
+    }).join('\n');
+    run.disabled=false;cancel.disabled=true;return;
+   }
+   var current=cases[index++],input={
+    hero:ids(current.hero),board:current.board?ids(current.board):[],
+    players:current.players,iterations:current.iterations
+   };
+   var calculator;
+   try{calculator=math.simulator(input);}
+   catch(err){status.textContent=err.message;run.disabled=false;cancel.disabled=true;return;}
+   var start=now();status.textContent='Измервам: '+current.name+'…';
+   function step(){
+    if(my!==serial)return;
+    try{
+     var done=calculator.batch(1200);
+     if(!done){setTimeout(step,0);return;}
+     var elapsed=Math.max(.1,now()-start),result=calculator.result();
+     var speed=1000*result.done/elapsed;
+     var row=document.createElement('tr');
+     [current.name+(result.exact?' (точно)':''),result.done.toLocaleString('bg-BG'),
+      elapsed.toFixed(1)+' ms',Math.round(speed).toLocaleString('bg-BG')].forEach(function(value){
+      var cell=document.createElement('td');cell.textContent=value;row.appendChild(cell);
+     });
+     rows.appendChild(row);
+     records.push({name:current.name,done:result.done,ms:elapsed,speed:speed,mode:result.method});
+     setTimeout(nextCase,0);
+    }catch(err){
+     status.textContent='Грешка: '+err.message;run.disabled=false;cancel.disabled=true;
+    }
+   }
+   setTimeout(step,0);
+  }
+  nextCase();
+ };
+})();
+</script>
+</body>
+</html>
