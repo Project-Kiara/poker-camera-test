@@ -27,7 +27,7 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r6 · OCR r11 (лични карти и UI) · 17.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r13 · OCR r11 (лични карти и UI) · 17.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
   '<p class="hint"><a href="./ocr-selftest.html?v=r8">Тест на 52 синтетични карти</a> · <a href="./ocr-regression.html?v=r8">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r11">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
@@ -173,6 +173,10 @@
   return true;
  }
  renderMemory(bridge.snapshot());
+ document.addEventListener('poker:camera-stopped',function(){
+  lastSignature='';repeats=0;lastApplied='';
+  clearAutoInputs();
+ });
  function readRank(c){return c.rank?c.rank:'непотвърдена';}
  function readSuit(c){return c.suit?(suitSymbols[c.suit]||c.suit):'непотвърдена';}
  function diagnostics(result,sourceInfo){
@@ -401,13 +405,17 @@
    frameWorking=true;
    try{
     var startedAt=Date.now();
-    var result=vision.analyze(canvasImage(video,true));
+    var frame=canvasImage(video,true);
+    var result=vision.analyze(frame);
     var signature=result.stage+','+result.board.map(function(c){return c.code||'?';}).join('|')+','+
        result.hero.map(function(c){return c.code||'?';}).join('|')+','+result.coveredHands;
     repeats=signature===lastSignature?repeats+1:1;
     lastSignature=signature;
     var isStable=repeats>=2;
     emitText(result,isStable);
+    document.dispatchEvent(new CustomEvent('poker:vision-frame',{detail:{
+     result:result,confirmed:isStable,frameWidth:frame.width,frameHeight:frame.height
+    }}));
     if(isStable)diagnostics(result);
     seatLine.textContent+=' · обработка '+(Date.now()-startedAt)+' ms';
     if(isStable){
