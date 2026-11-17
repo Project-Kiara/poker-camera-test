@@ -27,7 +27,7 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r19 · OCR r13 (52 карти + многокадрово потвърждение) · 17.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r22 · OCR r14 (позиционна памет + фотообразци) · 17.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
   '<p class="hint"><a href="./ocr-selftest.html?v=r18">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r19">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r19">Тест на няколко кадъра</a> · <a href="./ocr-regression.html?v=r18">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r18">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
@@ -89,6 +89,7 @@
  var contextCanvas=document.createElement('canvas'),ctx=contextCanvas.getContext('2d',{willReadFrequently:true});
  var lastSignature='',repeats=0,lastApplied='',frameWorking=false;
  var ownCodes=[],boardCodes=[],previousHeroWasAuto=false;
+ var recognitionBlocked=false,recoveryPending=false;
  var temporal=window.ACRTemporal&&window.ACRTemporal.createTracker();
  var memoryLine=document.getElementById('dealMemoryLine');
  var memoryA=document.getElementById('memoryCardA'),memoryB=document.getElementById('memoryCardB');
@@ -103,6 +104,7 @@
    modified=changeField(id,'')||modified;
   });
   boardCodes=[];ownCodes=[];previousHeroWasAuto=false;lastApplied='';
+   recognitionBlocked=false;recoveryPending=false;
   if(!modified)notifyMemory();
  }
  function selectMemoryOptions(el,available){
@@ -152,29 +154,44 @@
   status.textContent='Паметта е нулирана за ново раздаване.';
   lastSignature='';repeats=0;
  });
+ function suspendAnalysis(reason){
+  // Keep recognized cards visible while invalidating stale equity results.
+  if(!recognitionBlocked)notifyMemory();
+  recognitionBlocked=true;recoveryPending=true;lastApplied='';
+  status.textContent=reason;
+ }
  function ingestMemory(result){
+  var incompleteBoard=result.board.length>=3&&!result.boardComplete;
+  var incompleteHero=result.hero.length===2&&
+    result.hero.some(function(c){return !c.code;})&&ownCodes.length===2;
+  result.incompleteBoard=incompleteBoard;result.incompleteHero=incompleteHero;
   var update=bridge.observe(result);
-  if(result.stageConfirmed!==true||result.uniqueCards!==true){
-   clearAutoInputs();renderMemory(update.state);
-   status.textContent='Непотвърдено разпознаване — изчисленията са спрени.';
-   return false;
-  }
   if(update.handChanged){
    if(temporal)temporal.reset();
    clearAutoInputs();
    memoryStatus.textContent='Ново раздаване е потвърдено; паметта е нулирана.';
+   recoveryPending=true;
   }
   renderMemory(update.state);
   if(update.pending){
-   clearAutoInputs();
-   status.textContent='Проверка за ново раздаване ('+update.state.resetPending+'/3). Изчисленията са спрени.';
+   suspendAnalysis('Проверявам ново раздаване ('+
+     update.state.resetPending+'/3). Изчисленията са временно спрени.');
    return false;
   }
-  if(update.inconsistent){
-   clearAutoInputs();
-   status.textContent='Неочаквана смяна на личните карти на ривъра. Изчислението е спряно.';
+  if(result.temporalConflict||update.inconsistent){
+   suspendAnalysis('OCR несъответствие: сравнявам следващи кадри. '+
+     'Не заменям вече потвърдените карти.');
    return false;
   }
+  if(result.stageConfirmed!==true||result.uniqueCards!==true){
+   suspendAnalysis('Непотвърден кадър. Паметта е запазена, но вероятностите са спрени.');
+   return false;
+  }
+  if(incompleteBoard||incompleteHero){
+   suspendAnalysis('Не всички видими карти са потвърдени. Изчаквам по-ясен кадър.');
+   return false;
+  }
+  recognitionBlocked=false;
   return true;
  }
  renderMemory(bridge.snapshot());
@@ -310,12 +327,13 @@
       getField('hero0')!==''&&getField('hero1')!==''&&result.activePlayers>=2){
    changed=changeField('players',Math.min(9,result.activePlayers))||changed;
   }
-  if(changed&&result.uniqueCards&&result.stageConfirmed&&
+  if((changed||recoveryPending)&&result.uniqueCards&&result.stageConfirmed&&
      getField('hero0')!==''&&getField('hero1')!==''&&
      (board.length===0||result.boardComplete)){
     var run=document.getElementById('runAnalysis');
     if(run&&!run.disabled)run.click();
   }
+  recoveryPending=false;
  }
  function inspect(img,confirmed,sourceInfo){
   if(temporal)temporal.reset();
