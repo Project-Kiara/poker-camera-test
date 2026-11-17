@@ -27,7 +27,7 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r22 · OCR r14 (позиционна памет + фотообразци) · 17.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r25 · OCR r15 (префлоп раздавания + позиционна памет) · 17.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
   '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r23">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r23">Проверка със снимани символи</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
@@ -179,8 +179,13 @@
    return false;
   }
   if(result.temporalConflict||update.inconsistent){
-   suspendAnalysis('OCR несъответствие: сравнявам следващи кадри. '+
-     'Не заменям вече потвърдените карти.');
+   if(result.temporalReason==='new-deal-candidate'){
+    suspendAnalysis('Възможно ново раздаване ('+
+     (result.temporalPending||1)+'/3). Проверявам новите карти, без да ползвам старите.');
+   }else{
+    suspendAnalysis('OCR несъответствие: сравнявам следващи кадри. '+
+      'Не заменям вече потвърдените карти.');
+   }
    return false;
   }
   if(result.stageConfirmed!==true||result.uniqueCards!==true){
@@ -237,7 +242,9 @@
   e.value=String(value);e.dispatchEvent(new Event('change',{bubbles:true}));return true;
  }
  function emitText(result,confirmed){
-  function list(cards){return cards.map(function(c){return c.code?shown(c.code):'?';}).join(' ')||'няма';}
+  function list(cards){return cards.map(function(c){
+   return c.code?shown(c.code):(c.pendingCode?shown(c.pendingCode)+'?':'?');
+  }).join(' ')||'няма';}
   cardLine.textContent='Общи карти (борд): '+list(result.board);
   heroLine.textContent='Моите две карти: '+list(result.hero);
   othersLine.textContent='Други открити карти (не се смесват с борда): '+list(result.others);
@@ -435,7 +442,8 @@
     var result=vision.analyze(frame);
     if(temporal)temporal.observe(result,Date.now());
     var signature=result.stage+','+result.board.map(function(c){return c.code||'?';}).join('|')+','+
-       result.hero.map(function(c){return c.code||'?';}).join('|')+','+result.coveredHands;
+       result.hero.map(function(c){return c.code||(c.pendingCode?'~'+c.pendingCode:'?');}).join('|')+
+       ','+result.coveredHands;
     repeats=signature===lastSignature?repeats+1:1;
     lastSignature=signature;
     var isStable=repeats>=2;
@@ -445,7 +453,7 @@
     }}));
     if(isStable)diagnostics(result);
     seatLine.textContent+=' · обработка '+(Date.now()-startedAt)+' ms';
-    if(isStable){
+    if(isStable||result.forceNewHand){
      var accept=ingestMemory(result);
      if(accept&&lastApplied!==signature){applyResult(result);lastApplied=signature;}
     }
