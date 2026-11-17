@@ -207,7 +207,7 @@
   result.hero.forEach(function(c){regions[c.box.x+','+c.box.y]='Лични';});
   result.others.forEach(function(c){regions[c.box.x+','+c.box.y]='Други';});
   var cards=result.visible.slice().sort(function(a,b){return a.box.y-b.box.y||a.box.x-b.box.x;});
-  var lines=['OCR версия: r11 | '+(vision.templateCoverage?'13 стойности и 4 бои са представени в образците':'проверка на образците недостъпна'),
+  var lines=['OCR версия: r22 · фотообразци и позиционна памет | '+(vision.templateCoverage?'13 стойности и 4 бои са представени в образците':'проверка на образците недостъпна'),
     sourceInfo?'Източник: '+sourceInfo.originalWidth+'×'+sourceInfo.originalHeight+' → OCR: '+sourceInfo.ocrWidth+'×'+sourceInfo.ocrHeight+(sourceInfo.canonical?' (каноничен мащаб ACR)':' (общ мащаб)'):'Източник: видео кадър',
     'Открити правоъгълници: '+cards.length,
     'Игнорирани обекти от областта на бутоните: '+(result.ignoredUiBoxes||0),
