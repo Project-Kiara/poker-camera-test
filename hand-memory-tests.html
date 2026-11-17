@@ -118,6 +118,53 @@ function runAll(){
  check('Каре е по-силно от фул хаус',
    math.evaluate(cards('Ks Kh Kd Kc As 2d 3h'))>math.evaluate(cards('As Ah Ad Ks Kh Kd 2c')));
 
+
+ // Independent reference: compare the optimized seven-card ranker with
+ // all 21 possible five-card hands using a separate five-card evaluator.
+ function referenceFive(ids) {
+   var rs=ids.map(function(x){return x%13+2;}).sort(function(a,b){return b-a;});
+   var freq={};rs.forEach(function(x){freq[x]=(freq[x]||0)+1;});
+   var ordered=Object.keys(freq).map(Number).sort(function(a,b){return freq[b]-freq[a]||b-a;});
+   var flush=ids.every(function(x){return (x/13|0)===(ids[0]/13|0);});
+   var unique={};rs.forEach(function(x){unique[x]=true;});if(unique[14])unique[1]=true;
+   var straightHigh=0;
+   for(var h=14;h>=5;h--)if(unique[h]&&unique[h-1]&&unique[h-2]&&unique[h-3]&&unique[h-4]){straightHigh=h;break;}
+   var cat,parts;
+   if(flush&&straightHigh){cat=8;parts=[straightHigh];}
+   else if(freq[ordered[0]]===4){cat=7;parts=[ordered[0],ordered[1]];}
+   else if(freq[ordered[0]]===3&&freq[ordered[1]]===2){cat=6;parts=[ordered[0],ordered[1]];}
+   else if(flush){cat=5;parts=rs;}
+   else if(straightHigh){cat=4;parts=[straightHigh];}
+   else if(freq[ordered[0]]===3){cat=3;parts=ordered;}
+   else if(freq[ordered[0]]===2&&freq[ordered[1]]===2){
+     cat=2;parts=ordered.slice(0,2).sort(function(a,b){return b-a;}).concat(ordered[2]);
+   }else if(freq[ordered[0]]===2){cat=1;parts=ordered;}
+   else{cat=0;parts=rs;}
+   while(parts.length<5)parts.push(0);
+   return parts.reduce(function(v,p){return v*15+p;},cat);
+ }
+ function referenceSeven(ids) {
+   var best=0;
+   for(var a=0;a<3;a++)for(var b=a+1;b<4;b++)
+     for(var c=b+1;c<5;c++)for(var d=c+1;d<6;d++)
+       for(var e=d+1;e<7;e++)
+         best=Math.max(best,referenceFive([ids[a],ids[b],ids[c],ids[d],ids[e]]));
+   return best;
+ }
+ var seed=200317;
+ function randomIndex(n){seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed%n;}
+ var independentAgreement=true;
+ for(var trial=0;trial<400;trial++){
+   var shuffled=Array.from({length:52},function(_,i){return i;});
+   for(var pos=0;pos<7;pos++){
+     var pick=pos+randomIndex(52-pos),temp=shuffled[pos];
+     shuffled[pos]=shuffled[pick];shuffled[pick]=temp;
+   }
+   var hand=shuffled.slice(0,7);
+   if(math.evaluate(hand)!==referenceSeven(hand)){independentAgreement=false;break;}
+ }
+ check('Независима проверка на 400 седемкартови ръце срещу 5-картова оценка',independentAgreement);
+
  return {passed:list.filter(function(x){return x.pass;}).length,total:list.length,tests:list};
 }
 
