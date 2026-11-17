@@ -1,0 +1,33 @@
+<!doctype html><html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OCR — реални символи от втори кадър</title>
+<style>body{max-width:760px;margin:20px auto;background:#101927;color:#f2f7fd;font:15px/1.5 system-ui;padding:0 15px}button{padding:10px 17px;border:0;border-radius:9px;background:#60dfb4;color:#092a24;font-weight:700}p{color:#bbcee1}a{color:#a7dcff}li{padding:7px;border-bottom:1px solid #345070}.pass{color:#6af0aa}.fail{color:#ff98a4}</style></head>
+<body><h1>OCR — проверка със символи от снимки</h1>
+<p>Шест изолирани стойности от отделен кадър от тестовете на iPhone. Тези маски не са използвани за настройване на новите OCR образци. Проверката не включва намиране на картите в кадър и не доказва обща точност на камерата.</p>
+<button id="run">Провери шестте стойности</button><p id="status" role="status">Готов за тест.</p><ol id="list"></ol>
+<p><a href="./">Към камерата</a> · <a href="./ocr-temporal-tests.html?v=r23">Тест на паметта</a></p>
+<script src="./acr-template-bank.js?v=packed-r20"></script>
+<script src="./acr-vision.js?v=photo-r23"></script>
+<script>
+(function(){
+'use strict';
+var samples=[["J","0000000000000001800001c00001c00001c00001c00001c00001c00001c00001c00001c00001c00001c00381c003c1c003c1c003c3c001ff8000ff80007f00000000000000000000"],["A","000000000000001800001c00003c00003e00003e00007e0000630000c30000c10000c1000181800181c001c0c003e1c003ffe003ffe00700e00600700e00300c0030000000000000"],["10","0000000000000000000000400301f80303f81f061c3f040c070404030404030c04030c04030c0403040403060c03060c0307980303f8000000000000000000000000000000000000"],["4","000000000000000300000f80000f80001f80001f80003f8000778000638000c38001c3800183800383800787c007ffe007ffe007ffe0000fc0000780000380000380000000000000"],["Q","000000000000000800007f0001ffc003ffe007c1f00780f00f00780e00381e00381e00381e00381e00380e00780f07f80f83f007c3f003fff001fff8007ff8000000000000000000"],["2","000000000000003c00007e0001ff8001ffc003c3c00781c00381c00001c00003c00003c0000f80000f00003e00007c0000f80001f00001e00003ffc007ffc007ffc0000000000000"]];
+function parse(s){var a=new Uint8Array(576);for(var y=0;y<24;y++){var b=parseInt(s.slice(y*6,y*6+6),16);
+ for(var x=0;x<24;x++)a[y*24+x]=(b>>(23-x))&1;}return a;}
+document.getElementById('run').onclick=function(){
+ var list=document.getElementById('list');list.textContent='';var passed=0;
+ samples.forEach(function(item){
+  var match=window.ACRVision.matchSymbol(parse(item[1]),'rank'),first=match.first,second=match.second;
+  var margin=first?first.score-(second?second.score:0):0;
+  var ok=first&&first.key===item[0]&&
+   (first.score>=.68&&margin>=.043||item[0]==='10'&&
+    first.provenance==='acr'&&first.score>=.63&&margin>=.21);
+  var li=document.createElement('li');li.className=ok?'pass':'fail';
+  li.textContent=(ok?'✓ ':'✗ ')+item[0]+' → '+(first?first.key:'?')+
+   ', сходство '+(first?(first.score*100).toFixed(1):0)+'%, разлика '+(margin*100).toFixed(1)+' п.';
+  list.appendChild(li);if(ok)passed++;
+ });
+ document.getElementById('status').textContent=passed+'/'+samples.length+
+  ' успешно прочетени символа от отделен кадър.';
+};
+})();
+</script></body></html>
