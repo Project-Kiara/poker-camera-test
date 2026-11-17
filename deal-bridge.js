@@ -11,7 +11,7 @@ function observe(frame){
  var inconsistent=!!(frame&&frame.stageConfirmed&&frame.uniqueCards&&
    frame.board&&frame.board.length>=3&&key&&now.heroIdentity&&key!==now.heroIdentity);
  unresolved=!!(!frame||frame.stageConfirmed!==true||frame.uniqueCards!==true||
-   frame.temporalConflict||inconsistent);
+   frame.temporalConflict||frame.incompleteBoard||frame.incompleteHero||inconsistent);
  if(now.hand!==previous.hand)unresolved=false;
  return {state:now,handChanged:now.hand!==previous.hand,
    pending:now.resetPending>0,inconsistent:inconsistent,unstable:unresolved};
