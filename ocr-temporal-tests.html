@@ -11,7 +11,7 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
 <button id="run" type="button">Пусни проверките</button>
 <p id="summary" role="status">Готов за тест.</p><ol id="list"></ol>
 <p><a href="./">Към камерата</a> · <a href="./ocr-library-tests.html?v=r19">Тест на 52 карти</a></p>
-<script src="./acr-temporal.js?v=preflop-r26"></script>
+<script src="./acr-temporal.js?v=hero-ocr-r27"></script>
 <script>
 (function(){
  'use strict';
@@ -166,6 +166,28 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
   check('Префлоп: връщане към правилните карти изчиства конфликта',
     !f.temporalConflict&&f.hero[0].code==='4h'&&f.hero[1].code==='Jd');
 
+
+  var changing=mod.createTracker();
+  function oldTurn(){return frame([card('4','s','4s',100),card('10','s','10s',220)],
+    [card('Q','c','Qc',30),card('2','d','2d',130),card('A','d','Ad',230),card('7','c','7c',330)],'Търн');}
+  changing.observe(oldTurn(),100);changing.observe(oldTurn(),700);
+  f=changing.observe(frame([card('4','s','4s',100),card('10','s','10s',220)],
+    [card('Q','c','Qc',30),card('2','d','2d',130),card('A','d','Ad',230)],'Флоп'),1300);
+  check('Изчезнала четвърта карта не се приема за флоп',f.temporalReason==='missing-board-card'&&
+    f.temporalConflict&&f.boardComplete===false);
+  function newFlop(){return frame([card('4','d','4d',100),card(null,null,null,220)],
+    [card('A','d','Ad',30),card('6','s','6s',130),card('9','c','9c',230)],'Флоп');}
+  f=changing.observe(newFlop(),1900);
+  check('Нов борд с непълна лична ръка: първи кадър',f.temporalPending===1&&
+    f.temporalReason==='new-deal-candidate'&&!f.forceNewHand);
+  f=changing.observe(newFlop(),2500);
+  check('Нов борд с непълна лична ръка: втори кадър',f.temporalPending===2&&!f.forceNewHand);
+  f=changing.observe(newFlop(),3100);
+  check('Третият стабилен кадър потвърждава новото раздаване',f.forceNewHand===true&&
+    f.hero[0].code==='4d'&&f.hero[1].code===null&&f.boardComplete);
+  f=changing.observe(newFlop(),3700);
+  check('Старите лични карти не се наследяват в новия борд',
+    !f.temporalConflict&&f.hero[1].code===null);
   return checks;
  }
  document.getElementById('run').addEventListener('click',function(){
