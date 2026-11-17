@@ -82,17 +82,31 @@
     return encode(0, h[0], h[1], h[2], h[3], h[4]);
   }
   function category(score) { return Math.floor(score / 759375); } // 15^5
+  /*
+   * Adaptive probability engine:
+   * Enumerates every possible remaining deal when the sample space is small.
+   * Otherwise performs incremental Monte Carlo and reports sampling uncertainty.
+   * Unknown opponents are uniformly random; it cannot know their actual ranges.
+   */
+  var EXACT_LIMIT = 50000;
+  function combinationsCount(n, k) {
+    if (k < 0 || k > n) return 0;
+    k = Math.min(k, n - k);
+    var count = 1;
+    for (var i = 1; i <= k; i++) count = count * (n - k + i) / i;
+    return Math.round(count);
+  }
   function simulator(input) {
     var hero = input.hero || [], board = input.board || [], dead = input.dead || [];
-    var players = input.players, iterations = input.iterations || 2000;
+    var players = input.players, iterations = input.iterations || 10000;
     var knownOpponents = input.knownOpponents || [];
     if (hero.length !== 2) throw new Error('Посочи и двете лични карти.');
     if ([0,3,4,5].indexOf(board.length) < 0) throw new Error('Общите карти трябва да са 0, 3, 4 или 5.');
     if (!Number.isInteger(players) || players < 2 || players > 9) throw new Error('Избери 2–9 активни играчи, включително теб.');
-    if (!Number.isInteger(iterations) || iterations < 100 || iterations > 20000) throw new Error('Невалиден брой симулации.');
+    if (!Number.isInteger(iterations) || iterations < 100 || iterations > 50000) throw new Error('Невалиден брой симулации.');
     if (!Array.isArray(knownOpponents) || knownOpponents.length > players - 1)
       throw new Error('Невалиден списък с разкрити ръце на противници.');
-    var known = hero.concat(board,dead), seen = {}, deck = [], i;
+    var known = hero.concat(board, dead), seen = {}, deck = [], i;
     for (i = 0; i < knownOpponents.length; i++) {
       if (!Array.isArray(knownOpponents[i]) || knownOpponents[i].length !== 2)
         throw new Error('Всяка разкрита ръка трябва да съдържа точно две карти.');
@@ -105,54 +119,127 @@
       seen[id] = true;
     }
     for (i = 0; i < 52; i++) if (!seen[i]) deck.push(i);
-    var remainingBoard = 5 - board.length, opponents = players - 1;
-    var randomOpponents = opponents - knownOpponents.length;
-    var draws = remainingBoard + randomOpponents * 2;
+    var missingBoard = 5 - board.length, opponents = players - 1;
+    var unknownOpponents = opponents - knownOpponents.length;
+    var draws = missingBoard + unknownOpponents * 2;
     if (draws > deck.length) throw new Error('Недостатъчно останали карти за този брой играчи.');
-    var count = 0, wins = 0, losses = 0, ties = 0, share = 0;
+
+    // Count distinct unordered boards and unordered opponent hands. Opponent
+    // seats remain distinct, so their assignments are not divided by factorials.
+    var spaces = combinationsCount(deck.length, missingBoard);
+    var left = deck.length - missingBoard;
+    for (i = 0; i < unknownOpponents; i++) {
+      spaces *= combinationsCount(left, 2);
+      left -= 2;
+      if (spaces > EXACT_LIMIT) break;
+    }
+    var exact = spaces <= EXACT_LIMIT;
+    var total = exact ? spaces : iterations;
+    var count = 0, wins = 0, losses = 0, ties = 0, share = 0, shareSquares = 0;
     var categories = [0,0,0,0,0,0,0,0,0];
-    // One simulation compares the hero hand with every active opponent.
-    function runOne() {
-      var pool = deck.slice(), i;
-      for (i = 0; i < draws; i++) {
-        var j = i + Math.floor(Math.random() * (pool.length - i));
-        var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+
+    // Lazy combination generators never store the full enumeration in RAM.
+    function* choose(pool, length, offset, selected) {
+      if (selected.length === length) {
+        yield selected.slice();
+        return;
       }
-      var finalBoard = board.slice();
-      for (i = 0; i < remainingBoard; i++) finalBoard.push(pool[i]);
+      var needed = length - selected.length;
+      for (var ix = offset; ix <= pool.length - needed; ix++) {
+        selected.push(pool[ix]);
+        yield* choose(pool, length, ix + 1, selected);
+        selected.pop();
+      }
+    }
+    function* hands(pool, leftHands, picked, boardExtra) {
+      if (!leftHands) {
+        yield {extra:boardExtra, unknown:picked.slice()};
+        return;
+      }
+      for (var a = 0; a < pool.length - 1; a++) {
+        for (var b = a + 1; b < pool.length; b++) {
+          var smaller = pool.slice(0, a).concat(pool.slice(a + 1, b),pool.slice(b + 1));
+          picked.push([pool[a],pool[b]]);
+          yield* hands(smaller, leftHands - 1, picked, boardExtra);
+          picked.pop();
+        }
+      }
+    }
+    function* exactDeals() {
+      for (var extra of choose(deck, missingBoard, 0, [])) {
+        var remaining = deck.filter(function (id) {return extra.indexOf(id) === -1;});
+        yield* hands(remaining, unknownOpponents, [], extra);
+      }
+    }
+    var exactIterator = exact ? exactDeals() : null;
+    function runTrial(extra, unknown) {
+      var finalBoard = board.concat(extra);
       var own = evaluate(hero.concat(finalBoard));
       categories[category(own)]++;
-      var best = own, winnerCount = 1, position = remainingBoard;
-      for (i = 0; i < opponents; i++) {
-        var other = i < knownOpponents.length ?
-          evaluate(knownOpponents[i].concat(finalBoard)) :
-          evaluate([pool[position++], pool[position++]].concat(finalBoard));
-        if (other > best) { best = other; winnerCount = 1; }
+      var best = own, winnerCount = 1, pos;
+      for (pos = 0; pos < opponents; pos++) {
+        var hand = pos < knownOpponents.length ?
+          knownOpponents[pos] : unknown[pos - knownOpponents.length];
+        var other = evaluate(hand.concat(finalBoard));
+        if (other > best) {best = other; winnerCount = 1;}
         else if (other === best) winnerCount++;
       }
+      var part = 0;
       if (own < best) losses++;
-      else if (winnerCount > 1) { ties++; share += 1 / winnerCount; }
-      else { wins++; share++; }
+      else if (winnerCount > 1) {ties++; part = 1 / winnerCount;}
+      else {wins++; part = 1;}
+      share += part;
+      shareSquares += part * part;
       count++;
+    }
+    function runRandom() {
+      var pool = deck.slice();
+      for (var j = 0; j < draws; j++) {
+        var k = j + Math.floor(Math.random() * (pool.length - j));
+        var tmp = pool[j];pool[j] = pool[k];pool[k] = tmp;
+      }
+      var extra = pool.slice(0, missingBoard);
+      var randomHands = [], position = missingBoard;
+      for (var q = 0; q < unknownOpponents; q++)
+        randomHands.push([pool[position++],pool[position++]]);
+      runTrial(extra, randomHands);
     }
     function result() {
       var denom = count || 1;
+      var margin = null;
+      if (exact) margin = 0;
+      else if (count > 1) {
+        var variance = Math.max(0, (shareSquares - share * share / count) / (count - 1));
+        margin = 100 * 1.96 * Math.sqrt(variance / count);
+      }
       return {
-        done: count, total: iterations, players: players,
-        knownOpponents: knownOpponents.length,
-        win: 100 * wins / denom, loss: 100 * losses / denom,
-        tie: 100 * ties / denom, equity: 100 * share / denom,
-        categories: categories.map(function (n) {return 100 * n / denom;}),
-        names: HAND_NAMES.slice()
+        done:count, total:total, players:players,
+        exact:exact, method:exact?'exact':'monte-carlo',
+        equityMargin95:margin,
+        knownOpponents:knownOpponents.length,
+        win:100*wins/denom, loss:100*losses/denom,
+        tie:100*ties/denom, equity:100*share/denom,
+        categories:categories.map(function (n) {return 100*n/denom;}),
+        names:HAND_NAMES.slice()
       };
     }
     return {
-      batch: function (size) {
-        var end = Math.min(iterations, count + size);
-        while (count < end) runOne();
-        return count >= iterations;
+      batch:function (size) {
+        var end = Math.min(total, count + Math.max(1,Math.floor(size || 1)));
+        var deadline = Date.now() + 8;
+        do {
+          if (exact) {
+            var next = exactIterator.next();
+            if (next.done) {
+              if (count !== total) throw new Error('Непълно точно изброяване на комбинациите.');
+              break;
+            }
+            runTrial(next.value.extra, next.value.unknown);
+          } else runRandom();
+        } while (count < end && Date.now() < deadline);
+        return count >= total;
       },
-      result: result
+      result:result
     };
   }
   root.PokerMath = {
