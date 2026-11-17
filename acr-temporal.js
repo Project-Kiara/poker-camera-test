@@ -15,13 +15,13 @@
    stage=result.stage;
    var changes=[];
    function reconcile(kind,cards){
-    var old=tracks[kind],next=[];
+    var old=tracks[kind],next=[],used=[];
     cards.forEach(function(card){
      if(!card||!card.box)return;
      var b=card.box,cx=b.x+b.width/2,cy=b.y+b.height/2;
      var nearest=null,distance=Infinity;
      old.forEach(function(track){
-      if(now-track.last>2800)return;
+      if(used.indexOf(track)!==-1||now-track.last>2800)return;
       var dx=Math.abs(cx-track.cx)/Math.max(1,b.width);
       var dy=Math.abs(cy-track.cy)/Math.max(1,b.height);
       var dw=Math.abs(b.width-track.w)/Math.max(1,b.width);
@@ -32,6 +32,7 @@
       }
      });
      var track=nearest||{samples:[]};
+     if(nearest)used.push(nearest);
      track.cx=cx;track.cy=cy;track.w=b.width;track.h=b.height;track.last=now;
      var rank=card.rank||null,suit=card.suit||null;
      // Invalidate observations when a new visible identity conflicts with
