@@ -11,7 +11,7 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
 <button id="run" type="button">Пусни проверките</button>
 <p id="summary" role="status">Готов за тест.</p><ol id="list"></ol>
 <p><a href="./">Към камерата</a> · <a href="./ocr-library-tests.html?v=r19">Тест на 52 карти</a></p>
-<script src="./acr-temporal.js?v=slot-lock-r23"></script>
+<script src="./acr-temporal.js?v=preflop-r26"></script>
 <script>
 (function(){
  'use strict';
@@ -134,6 +134,37 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
   f=sameBoard.observe(oneHeroMistake,1200);
   check('Една грешка при същия борд не е ново раздаване',
    !f.forceNewHand&&f.temporalConflict);
+
+  // Regression for the photographed 4♥ J♦ preflop: the camera can miss
+  // the intervening board, so a prior preflop pair must not lock forever.
+  var preflopTracker=mod.createTracker();
+  function oldPreflop(){return frame([
+    card('Q','c','Qc',100),card('2','d','2d',220)],[],'Префлоп');}
+  function newPreflop(){return frame([
+    card('4','h','4h',100),card('J','d','Jd',220)],[],'Префлоп');}
+  preflopTracker.observe(oldPreflop(),100);
+  preflopTracker.observe(oldPreflop(),700);
+  f=preflopTracker.observe(newPreflop(),1300);
+  check('Префлоп: 4♥ J♦ първи кадър се показва като непотвърден',
+    f.temporalConflict===true&&f.temporalPending===1&&
+    f.hero[0].pendingCode==='4h'&&f.hero[1].pendingCode==='Jd'&&
+    f.hero.every(function(c){return !c.code;}));
+  f=preflopTracker.observe(newPreflop(),1900);
+  check('Префлоп: втори еднакъв кадър още не изтрива старите карти',
+    f.temporalConflict===true&&f.temporalPending===2&&!f.forceNewHand);
+  f=preflopTracker.observe(newPreflop(),2500);
+  check('Префлоп: трети еднакъв кадър приема новото раздаване',
+    f.forceNewHand===true&&f.hero[0].code==='4h'&&f.hero[1].code==='Jd');
+  f=preflopTracker.observe(newPreflop(),3100);
+  check('Префлоп: след смяната няма вечен OCR конфликт',
+    !f.temporalConflict&&f.hero[0].code==='4h'&&f.hero[1].code==='Jd');
+  f=preflopTracker.observe(frame([
+    card('8','s','8s',100),card('K','d','Kd',220)],[],'Префлоп'),3700);
+  check('Префлоп: единичен шум не създава трето раздаване',
+    f.temporalConflict===true&&!f.forceNewHand);
+  f=preflopTracker.observe(newPreflop(),4300);
+  check('Префлоп: връщане към правилните карти изчиства конфликта',
+    !f.temporalConflict&&f.hero[0].code==='4h'&&f.hero[1].code==='Jd');
 
   return checks;
  }
