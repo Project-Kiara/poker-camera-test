@@ -2,14 +2,14 @@
 (function(root){'use strict';
 function createTracker(options){
   var required=Math.max(3,(options&&options.confirmations)||3);
-  var hand=1,seen={},other={},protectedCards={},dead={},showdown={},sawBoard=false,heroId='';
+  var hand=1,seen={},other={},protectedCards={},dead={},showdown={},sawBoard=false,heroId='',boardIdentity=[];
   var pending='',pendingFrames=0;
   function keys(obj){return Object.keys(obj);}
   function codes(cards){return (cards||[]).filter(function(c){return c&&typeof c.code==='string'&&/^(?:10|[2-9JQKA])[cdhs]$/.test(c.code);}).map(function(c){return c.code;});}
-  function clear(){seen={};other={};protectedCards={};dead={};showdown={};sawBoard=false;heroId='';pending='';pendingFrames=0;}
+  function clear(){seen={};other={};protectedCards={};dead={};showdown={};sawBoard=false;heroId='';boardIdentity=[];pending='';pendingFrames=0;}
   function snapshot(){return {hand:hand,seen:keys(seen),revealedOther:keys(other),
       dead:keys(dead),knownOpponents:keys(showdown).map(function(k){return showdown[k].slice();}),
-      boardSeen:sawBoard,heroIdentity:heroId,resetPending:pendingFrames};}
+      boardSeen:sawBoard,heroIdentity:heroId,boardIdentity:boardIdentity.slice(),resetPending:pendingFrames};}
   function observe(result){
     if(!result||result.stageConfirmed!==true||result.uniqueCards!==true){pending='';pendingFrames=0;return snapshot();}
     var board=codes(result.board),hero=codes(result.hero),outs=codes(result.others);
@@ -17,7 +17,10 @@ function createTracker(options){
     var key=hasHero?hero.slice().sort().join('|'):'';
     var preflop=result.stage==='Префлоп'&&(result.board||[]).length===0;
     var isNew=preflop&&hasHero&&(sawBoard||(heroId&&key!==heroId));
-    if(isNew){
+    var forced=!!(result.forceNewHand&&hasHero&&board.length>=3);
+   if(forced){
+     hand++;clear();
+   }else if(isNew){
       pendingFrames=(pending===key)?pendingFrames+1:1;pending=key;
       // Do not put pending new cards into the previous deal before confirmation.
       if(pendingFrames<required)return snapshot();
@@ -27,7 +30,16 @@ function createTracker(options){
       // A different hero during a non-preflop stage is an inconsistent read.
       if(hasHero&&heroId&&key!==heroId)return snapshot();
     }
-    if((result.board||[]).length>=3)sawBoard=true;
+    if((result.board||[]).length>=3){
+     sawBoard=true;
+     // Store verified original board positions without changing earlier cards
+     // because of an isolated OCR error.
+     if(board.length===(result.board||[]).length){
+       if(!boardIdentity.length)boardIdentity=board.slice();
+       else for(var bi=0;bi<board.length;bi++)
+         if(!boardIdentity[bi])boardIdentity[bi]=board[bi];
+     }
+   }
     if(hasHero&&!heroId)heroId=key;
     board.concat(hero).forEach(function(c){seen[c]=true;protectedCards[c]=true;delete other[c];});
     outs.forEach(function(c){if(!protectedCards[c]){seen[c]=true;other[c]=true;}});
