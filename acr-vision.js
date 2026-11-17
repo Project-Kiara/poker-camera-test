@@ -33,6 +33,9 @@ var VERIFIED_ACR_RANK_MASKS={"3":["000000000000001800007f0000ff8001ffc003e7c003c
 // Suit glyphs extracted from verified ACR screenshots. Rank glyphs and
 // suit glyphs are scored independently, with colour consistency validation.
 var VERIFIED_ACR_SUIT_MASKS={"d":["00000000000000ff8001ffc003ffe003fff007fff80ffffc1ffffc3ffffc3ffffc1ffffc0ffff807fff003ffe000ffc000ff80007f00007f00003e00001e00000000000000000000"],"h":["0000000000000000003ffffc3ffffc3ffffc3ffffc3ffffc3ffffc1ffff80ffff807fff007fff003ffe001ffc000ff8000ff80007f00003e00001c00000000000000000000000000"],"c":["00000000000001ff0001ff8001ff8001ff8001ff8001ffc007fff00ffff81ffffc3ffffc3ffffc3ffffc3ffffc1ffffc0ffff0000800001800001c00003c00003e00000000000000"],"s":["000000000000003c00007e0000ff0001ff8003ffc007fff01ffff83ffff83ffff83ffff83ffff81ffff81ffff80fcdf8000c00001c00001c00001c00003e00003e00000000000000"]};
+// Rank-only 24×24 masks, sampled from user-provided camera photographs.
+// These are NOT complete validated card photographs; holdout testing is required.
+var USER_CAMERA_RANK_MASKS={"2":["000000000000003c0000ff8001ffc003ffc007c3e00781e00781e00001e00003c00007c0000f80003f80007e0000fc0001f80003e00007e00007ffe007ffe007ffe0000000000000"],"5":["0000000000000000003ffffc00000000000001fe0001c00001800001000001000001380001fe00000600000700000700000700030700018e0000fc00000000000000000000000000"],"6":["000000000000001000007f0000ff8001ffc001e3c003c00003c00003cc0007ff0007ffc007e7c007c3c00781c00381c003c1c003c1c001e3c001ffc000ff80007f00000000000000"],"10":["0000000000000000000000000301c00307f00707383f0e18070c0c030c0c030c0c030c0c030c0c030c0c030c0c030c0c030c0c030e1c0307380303f0000000000000000000000000"],"A":["000000000000003c00003c00007c00007e0000fe0000e70000e70001e70001c38001c38003c3800381c00381c003c3c007ffe007ffe00700e00e00700e00701c0030000000000000"],"Q":["000000000000001c0000ff8001ffc003ffe007c1f00f00780f00780f00781f00781e00781e00381e00781e00780f02780f07f80783f007c3f003fff001fff800ffb8000000000000"],"J":["0000000000000001800003c00003c00003c00003c00003c00003c00001c00003c00003c00001c00001c00181c003c1c003c1c001c3c001e3c001ff8000ff80003e00000000000000"]};
 function templates(){
  if(CACHE)return CACHE;CACHE={rank:[],suit:[]};
  for(var kind in REF)for(var key in REF[kind])CACHE[kind].push({key:key,mask:matrixFromHex(REF[kind][key]),provenance:'acr'});
@@ -56,6 +59,11 @@ function templates(){
        key:verifiedSuit,mask:matrixFromHex(suitRows),provenance:'acr'
      });
    }
+ }
+ for(var croppedRank in USER_CAMERA_RANK_MASKS)for(var z=0;z<USER_CAMERA_RANK_MASKS[croppedRank].length;z++){
+  CACHE.rank.push({key:croppedRank,
+   mask:matrixFromHex(USER_CAMERA_RANK_MASKS[croppedRank][z].match(/.{6}/g)),
+   provenance:'acr'});
  }
  var fonts=['Arial','Helvetica','sans-serif'],names=RANK_VALUES;
  for(var j=0;j<names.length;j++)for(var f=0;f<fonts.length;f++){
