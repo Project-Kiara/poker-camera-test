@@ -3,10 +3,10 @@
 <title>Покер анализатор — тестове за раздаване и математика</title>
 <style>body{max-width:780px;margin:24px auto;padding:0 16px;background:#101927;color:#e9f3ff;font:15px/1.5 system-ui}p{color:#b9cce0}button{padding:12px 18px;background:#61ddb3;border:0;border-radius:9px;font-weight:700}li{margin:6px 0;padding:7px;border-bottom:1px solid #34455e}.pass{color:#7af0b8}.fail{color:#ff9ea9}a{color:#a2d9ff}</style></head>
 <body><h1>Тестове за паметта на картите и вероятностите</h1>
-<p>Изпълнява 36 автоматизирани проверки в браузъра. Това не доказва, че OCR разпознава без грешка реални снимки.</p>
+<p>Изпълнява разширени автоматизирани проверки на паметта, точната математика и симулациите в браузъра. Това не доказва, че OCR разпознава без грешка реални снимки.</p>
 <button id="run">Пусни всички тестове</button><p id="summary" role="status">Тестовете не са стартирани.</p><ol id="results"></ol>
 <p><a href="./">Към приложението</a> · <a href="./ocr-regression.html">OCR диагностика</a></p>
-<script src="./poker-engine.js?v=deal-tests-20261116"></script><script src="./hand-tracker.js?v=deal-memory-r9"></script><script src="./deal-bridge.js?v=deal-memory-r9"></script><script>
+<script src="./poker-engine.js?v=adaptive-equity-r15"></script><script src="./hand-tracker.js?v=deal-memory-r9"></script><script src="./deal-bridge.js?v=deal-memory-r9"></script><script>
 
 function runAll(){
  const tracker=window.PokerHandTracker,math=window.PokerMath,list=[];
@@ -14,7 +14,7 @@ function runAll(){
  function c(codes){return codes.map(function(code){return {code:code};});}
  function frame(stage,board,hero,others){return {stage:stage,board:c(board),hero:c(hero),others:c(others),stageConfirmed:true,uniqueCards:true};}
  function cards(s){return s.split(' ').map(math.idFromCode);}
- function sample(opts){opts.iterations=200;var s=math.simulator(opts);s.batch(200);return s.result();}
+ function sample(opts){opts.iterations=200;var s=math.simulator(opts),guard=0;while(!s.batch(5000)){if(++guard>10000)throw new Error('Тестът не приключва.');}return s.result();}
  function rejects(fn){try{fn();return false;}catch(e){return true;}}
  const river=frame('Ривър',['5s','4c','10d','8c','10h'],['Ac','8h'],['Ks','Kd']);
  const next=frame('Префлоп',[],['Qd','Qc'],[]);
@@ -92,7 +92,32 @@ function runAll(){
  check('Дублирана известна карта се отхвърля',rejects(function(){sample({...base,knownOpponents:[cards('Ac Kc')]});}));
  check('Твърде много разкрити чужди ръце се отхвърлят',rejects(function(){sample({...base,knownOpponents:[cards('Kc Kd'),cards('Qc Qd')]});}));
  r=sample({...base,players:3,knownOpponents:[cards('Kc Kd')]});
- check('Смесени известни и неизвестни противници',r.done===200&&Math.abs(r.win+r.loss+r.tie-100)<1e-8);
+ check('Смесени известни и неизвестни противници: точно 903 варианта',
+  r.exact&&r.done===903&&Math.abs(r.win+r.loss+r.tie-100)<1e-8);
+ r=sample({hero:cards('As Ks'),board:cards('Qs Js Ts 2c 3d'),players:2});
+ check('Ривър срещу неизвестен: точно 990 възможни ръце',r.exact&&r.done===990&&r.win===100&&r.equityMargin95===0);
+ r=sample({hero:cards('2c 3d'),board:cards('As Ks Qs Js Ts'),players:2});
+ check('Общ роял флъш срещу неизвестен: 990 точни равенства',
+   r.exact&&r.done===990&&r.tie===100&&r.equity===50);
+ r=sample({hero:cards('Ac Ad'),board:cards('2c 3d 4h'),knownOpponents:[cards('Kc Kd')],players:2});
+ check('Флоп срещу разкрита ръка: точни 990 възможни борда',
+   r.exact&&r.done===990&&Math.abs(r.win+r.loss+r.tie-100)<1e-8);
+ const turn=math.simulator({hero:cards('As Ah'),board:cards('2c 3d 4h 9s'),players:2,iterations:200});
+ check('Търн 1 срещу 1: правилен размер на точната задача',
+   turn.result().exact===true&&turn.result().total===45540);
+ const multi=math.simulator({hero:cards('As Ah'),board:cards('2c 3d 4h 9s Js'),players:3,iterations:200});
+ check('Невъзможно скъпо изброяване: автоматично Monte Carlo',
+   multi.result().exact===false&&multi.result().total===200);
+ r=sample({hero:cards('As Ah'),board:[],players:2});
+ check('Префлоп: симулация и доверителен интервал',
+   !r.exact&&r.done===200&&Number.isFinite(r.equityMargin95)&&r.equityMargin95>=0);
+ check('Monte Carlo: вероятностите имат сума 100%',Math.abs(r.win+r.loss+r.tie-100)<1e-8);
+ check('A-2-3-4-5: колело стрейт',math.category(math.evaluate(cards('As 2d 3h 4c 5s Ks Qh')))===4);
+ check('Два трипса: правилен фул хаус',math.category(math.evaluate(cards('As Ah Ad Ks Kh Kd 2c')))===6);
+ check('Малък стрейт флъш',math.category(math.evaluate(cards('As 2s 3s 4s 5s 9c Td')))===8);
+ check('Каре е по-силно от фул хаус',
+   math.evaluate(cards('Ks Kh Kd Kc As 2d 3h'))>math.evaluate(cards('As Ah Ad Ks Kh Kd 2c')));
+
  return {passed:list.filter(function(x){return x.pass;}).length,total:list.length,tests:list};
 }
 
