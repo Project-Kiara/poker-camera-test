@@ -68,6 +68,13 @@ function templates(){
  }
  return CACHE;
 }
+var AUGMENTED_BANK=null;
+function variantBank(){
+ if(!root.ACRTemplateBank)return null;
+ if(!AUGMENTED_BANK)AUGMENTED_BANK=root.ACRTemplateBank.create(templates());
+ return AUGMENTED_BANK;
+}
+function cardLibrary(){var b=variantBank();return b?b.overview():null;}
 function glyphMask(img,box,part,variant){
  // Try slightly different corner crops only when the standard crop is uncertain.
  // All variants remain inside the rank/small-suit corner, never the big suit art.
@@ -93,17 +100,24 @@ function glyphMask(img,box,part,variant){
   if(running>=target){background=level;break;}
  }
  var blackLimit=Math.min(145,Math.max(40,background-34));
- var src=new Uint8Array(w*h),redCount=0,blackCount=0;
+ var src=new Uint8Array(w*h),redCount=0,blackCount=0,greenCount=0,blueCount=0;
  for(var y=0;y<h;y++)for(var x=0;x<w;x++){
   var i=((y+y0)*img.width+x+x0)*4,r=raw[i],g=raw[i+1],b=raw[i+2];
-  var red=r>76&&r>1.3*g&&r>1.2*b,black=Math.max(r,g,b)<blackLimit;
-  if(red||black){src[y*w+x]=1;if(red)redCount++;else blackCount++;}
+  var red=r>76&&r>1.3*g&&r>1.2*b;
+  var blue=b>70&&b>1.28*r&&b>1.17*g&&r<175;
+  var green=g>65&&g>1.23*r&&g>1.14*b&&r<175;
+  var black=Math.max(r,g,b)<blackLimit;
+  if(red||blue||green||black){
+   src[y*w+x]=1;
+   if(red)redCount++;else if(blue)blueCount++;else if(green)greenCount++;else blackCount++;
+  }
  }
- return {mask:maskNormalize(src,w,h),
-  // Shaded red ink can overlap neutral gray shadows. Require several red
-  // pixels and retain the strict test for normal bright cards.
+ var palette=[{name:'red',count:redCount},{name:'blue',count:blueCount},
+  {name:'green',count:greenCount}].sort(function(a,b){return b.count-a.count;});
+ var tint=palette[0],strong=tint.count>=Math.max(6,blackCount*(box.shaded?.20:.85));
+ return {mask:maskNormalize(src,w,h),inkColor:strong?tint.name:'black',
   isRed:redCount>=8&&redCount>blackCount*(box.shaded?.09:1.2),
-  count:redCount+blackCount};
+  count:redCount+blackCount+greenCount+blueCount};
 }
 function similarity(a,b){var common=0,all=0;for(var i=0;i<576;i++){if(a[i]||b[i]){all++;if(a[i]&&b[i])common++;}}return all?common/all:0;}
 function matchSymbol(mask,kind){
@@ -147,7 +161,7 @@ function fallbackTemplates(kind){
 function fallbackGlyph(img,box,part){
  var kind=part==='rank'?'rank':'suit',refs=fallbackTemplates(kind);
  if(!refs.length)return null;
- var votes={},total={},margins={},red={},bestVariant={};
+ var votes={},total={},margins={},red={},ink={},bestVariant={};
  for(var v=0;v<3;v++){
   var pixels=glyphMask(img,box,part,v);
   if(!pixels||!pixels.mask||pixels.count<10)continue;
@@ -169,6 +183,7 @@ function fallbackGlyph(img,box,part){
   total[first.key]=(total[first.key]||0)+first.score;
   margins[first.key]=(margins[first.key]||0)+margin;
   red[first.key]=pixels.isRed;
+  ink[first.key]=pixels.inkColor;
   bestVariant[first.key]=v;
  }
  var selected=null;
@@ -178,9 +193,37 @@ function fallbackGlyph(img,box,part){
   if(count<2||avg<.70||gap<.055)continue;
   if(!selected||count>selected.count||count===selected.count&&avg>selected.score)
    selected={key:key,score:avg,margin:gap,accepted:true,
-     isRed:red[key],variant:bestVariant[key],count:count,source:'font-fallback'};
+     isRed:red[key],inkColor:ink[key],variant:bestVariant[key],count:count,source:'font-fallback'};
  }
  return selected;
+}
+// Compare rotated, shifted and skewed masks only if the existing OCR is uncertain.
+// Require two agreeing corner crops for any newly accepted symbol.
+function variantGlyph(img,box,part){
+ var bank=variantBank();if(!bank)return null;
+ var kind=part==='rank'?'rank':'suit',votes={},scores={},margins={},tints={},reds={};
+ for(var v=0;v<3;v++){
+  var pixels=glyphMask(img,box,part,v);
+  if(!pixels||!pixels.mask||pixels.count<10)continue;
+  var m=bank.match(pixels.mask,kind);
+  if(!m.first||!m.second)continue;
+  var gap=m.first.score-m.second.score;
+  var calibrated=m.first.provenance==='acr-variant';
+  if(m.first.score<(calibrated?.70:.79)||gap<(calibrated?.055:.095))continue;
+  var key=m.first.key;
+  votes[key]=(votes[key]||0)+1;
+  scores[key]=(scores[key]||0)+m.first.score;
+  margins[key]=(margins[key]||0)+gap;
+  tints[key]=pixels.inkColor;reds[key]=pixels.isRed;
+ }
+ var best=null;
+ for(var key in votes)if(votes[key]>=2){
+  var score=scores[key]/votes[key],gap=margins[key]/votes[key];
+  if(!best||votes[key]>best.count||votes[key]===best.count&&score>best.score)
+   best={key:key,score:score,margin:gap,accepted:true,count:votes[key],
+    inkColor:tints[key],isRed:reds[key],variant:'augmented',source:'geometry-variant'};
+ }
+ return best;
 }
 function templateCoverage(){
  var base=templates(),secondary=fallbackTemplates('rank');
@@ -207,7 +250,7 @@ function selectGlyph(img,box,part){
   var accepted=matched.first.score>=(part==='rank'?.68:.71)&&
        gap>=(part==='rank'?.043:.055);
   var candidate={key:matched.first.key,score:matched.first.score,
-    margin:gap,accepted:accepted,isRed:pixels.isRed,variant:v,
+    margin:gap,accepted:accepted,isRed:pixels.isRed,inkColor:pixels.inkColor,variant:v,
     source:matched.first.provenance||'unknown'};
   if(accepted){
    shadedVotes[candidate.key]=(shadedVotes[candidate.key]||0)+1;
@@ -236,6 +279,8 @@ function selectGlyph(img,box,part){
  if(!chosen||!chosen.accepted){
   var alternate=fallbackGlyph(img,box,part);
   if(alternate&&(!box.shaded||alternate.count>=2))return alternate;
+  var adjusted=variantGlyph(img,box,part);
+  if(adjusted&&(!box.shaded||adjusted.count>=2))return adjusted;
  }
  return chosen;
 }
@@ -248,8 +293,15 @@ function classify(img,box){
  // matching corner-ink classification; allow nontraditional colour only
  // with stronger independent rank and suit glyph evidence.
  var standardColor=((suit.key==='h'||suit.key==='d')===suit.isRed);
- var validColor=rank.isRed===suit.isRed&&
-   (standardColor||(rank.score>=.80&&suit.score>=.80&&rank.margin>=.07&&suit.margin>=.07));
+ var rankTone=rank.inkColor||'black',suitTone=suit.inkColor||'black';
+ var palette=(suit.key==='d'&&suitTone==='blue')||
+   (suit.key==='c'&&suitTone==='green')||
+   (suit.key==='h'&&suitTone==='red')||
+   (suit.key==='s'&&suitTone==='black');
+ var validColor=(rank.isRed===suit.isRed&&
+   (standardColor||(rank.score>=.80&&suit.score>=.80&&rank.margin>=.07&&suit.margin>=.07)))||
+   (palette&&rankTone===suitTone&&rank.score>=.75&&suit.score>=.75&&
+    rank.margin>=.06&&suit.margin>=.06);
  var rankOk=rank.accepted,suitOk=suit.accepted&&validColor;
  var good=rankOk&&suitOk;
  return {box:box,code:good?rank.key+suit.key:null,
@@ -395,6 +447,6 @@ function analyze(img){
   boardComplete:board.length>=3&&board.every(function(c){return !!c.code;})&&noDuplicates,
   uniqueCards:noDuplicates};
 }
-root.ACRVision={analyze:analyze,classify:classify,glyphMask:glyphMask,matchSymbol:matchSymbol,templates:templates,templateCoverage:templateCoverage,groupVisible:groupVisible};
+root.ACRVision={analyze:analyze,classify:classify,glyphMask:glyphMask,matchSymbol:matchSymbol,templates:templates,templateCoverage:templateCoverage,cardLibrary:cardLibrary,groupVisible:groupVisible};
 
 }(typeof window!=='undefined'?window:globalThis));
