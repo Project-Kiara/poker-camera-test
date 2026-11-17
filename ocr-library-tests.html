@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="bg">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ACR — 52 карти и геометрични образци</title>
+<style>
+:root{font:15px/1.45 -apple-system,BlinkMacSystemFont,system-ui,sans-serif;color-scheme:dark}
+*{box-sizing:border-box}body{background:#101927;color:#f1f6fc;margin:0;padding:18px 12px 40px}
+main{max-width:760px;margin:auto}h1{font-size:22px;line-height:1.2}
+button{padding:10px 15px;border:0;border-radius:9px;background:#5cdeb6;color:#052c21;min-height:44px;font:700 15px system-ui}
+button:disabled{opacity:.45}p{color:#bdcbdd}code{color:#a1dbff}
+small{color:#becfe4}a{color:#90d5ff}
+#progress{font-weight:700;color:#e9f3ff}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px;border-bottom:1px solid #34445c;text-align:left}
+.good{color:#86f4b8}.bad{color:#ff9cac}
+pre{white-space:pre-wrap;word-break:break-word;font-size:12px;padding:12px;background:#1a2d43;border-radius:10px}
+</style>
+</head>
+<body><main>
+<h1>Тест на библиотеката — 52 карти</h1>
+<p>Проверява 13 стойности × 4 бои в два типа тестета и различни визуални условия. Образците за завъртане са генерирани от вече наличните OCR символи. Това е <b>синтетичен тест</b>, не доказателство за точност при действителни снимки.</p>
+<p id="coverage">Зареждам библиотеката…</p>
+<button id="run" type="button">Провери всички 52 карти</button>
+<p id="progress" role="status">Тестът не е стартиран.</p>
+<table><thead><tr><th>Условия</th><th>Успешно</th><th>Общо</th></tr></thead>
+<tbody id="out"></tbody></table>
+<h2>Неразпознати или объркани карти</h2>
+<pre id="failures">—</pre>
+<p><a href="./">Върни се към камерата</a> · <a href="./ocr-selftest.html?v=r18">Предишен OCR тест</a> · <a href="./ocr-shaded-tests.html?v=r18">Тест на ъгловите символи</a></p>
+</main>
+<script src="./card-detector.js?v=merged-hero-r11"></script>
+<script src="./acr-template-bank.js?v=geometry-r18"></script>
+<script src="./acr-vision.js?v=geometry-r18"></script>
+<script>
+(function(){
+ 'use strict';
+ var vision=window.ACRVision,output=document.getElementById('out'),
+ status=document.getElementById('progress'),fail=document.getElementById('failures'),
+ button=document.getElementById('run'),label=document.getElementById('coverage');
+ if(!vision){label.textContent='Не може да се зареди OCR модулът.';button.disabled=true;return;}
+ var library=vision.cardLibrary&&vision.cardLibrary();
+ if(!library||library.cards!==52){label.textContent='Грешка: липсва пълната библиотека.';button.disabled=true;return;}
+ label.textContent='52 комбинации · '+library.rankVariants+' геометрични образци за стойности · '+
+    library.suitVariants+' за бои. Съставени от 13 стойности и 4 бои; част от компонентите са синтетични.';
+ var ranks=['2','3','4','5','6','7','8','9','10','J','Q','K','A'],
+ suits='cdhs',symbols='♣♦♥♠';
+ var scenarios=[
+  {name:'Стандартно тесте, нормално осветление',color:'standard',angle:0,dim:false},
+  {name:'Стандартно тесте, завъртяно -7°',color:'standard',angle:-7,dim:false},
+  {name:'Стандартно тесте, приглушена светлина +7°',color:'standard',angle:7,dim:true},
+  {name:'Пълноцветно тесте, -7°',color:'four',angle:-7,dim:false}
+ ];
+ function makeFrame(rank,suit,scenario){
+  var c=document.createElement('canvas');c.width=210;c.height=275;
+  var g=c.getContext('2d',{willReadFrequently:true}),x=32,y=27,w=96,h=158;
+  g.fillStyle='#12432d';g.fillRect(0,0,c.width,c.height);
+  g.fillStyle=scenario.dim?'#c2c4c5':'#f8f8fa';g.fillRect(x,y,w,h);
+  var shade=scenario.dim?'#242628':'#17202b',ink=shade;
+  if(scenario.color==='four'){
+   if(suit==='h')ink='#bd2939';
+   if(suit==='d')ink='#2463cf';
+   if(suit==='c')ink='#18843d';
+  }else if(suit==='h'||suit==='d')ink='#bc2631';
+  g.fillStyle=ink;
+  function text(value,px,py,size,font){
+   g.save();g.translate(px,py);g.rotate(scenario.angle*Math.PI/180);
+   g.font='700 '+size+'px '+font;
+   g.textBaseline='alphabetic';g.fillText(value,0,0);g.restore();
+  }
+  text(rank,x+10,y+32,rank==='10'?26:31,'Arial');
+  text(symbols.charAt(suits.indexOf(suit)),x+10,y+76,31,'Georgia');
+  return vision.classify(g.getImageData(0,0,c.width,c.height),
+   {x:x,y:y,width:w,height:h});
+ }
+ button.addEventListener('click',function(){
+  button.disabled=true;output.textContent='';fail.textContent='';
+  var si=0,ci=0,failures=[],data=[];
+  function progress(){
+   if(si>=scenarios.length){
+    var total=data.reduce(function(sum,a){return sum+a.total;},0);
+    var ok=data.reduce(function(sum,a){return sum+a.pass;},0);
+    status.textContent='Готово: '+ok+'/'+total+' синтетични проверки. Реални снимки остават необходими.';
+    fail.textContent=failures.length?failures.join('\n'):'Няма грешки в синтетичните образци.';
+    button.disabled=false;return;
+   }
+   var scenario=scenarios[si],rank=ranks[Math.floor(ci/4)],suit=suits.charAt(ci%4),expected=rank+suit;
+   var found;
+   try{found=makeFrame(rank,suit,scenario);}
+   catch(err){found={code:null,reason:err.message};}
+   if(!data[si])data[si]={name:scenario.name,pass:0,total:0};
+   data[si].total++;
+   if(found.code===expected)data[si].pass++;
+   else failures.push(scenario.name+' · '+expected+' → '+
+    (found.code||'?')+' ('+(found.reason||'неразпозната')+')');
+   ci++;
+   if(ci===52){
+    var record=data[si],tr=document.createElement('tr');
+    [record.name,record.pass+'/52','52'].forEach(function(value,index){
+     var td=document.createElement('td');
+     td.textContent=value;
+     if(index===1)td.className=record.pass===52?'good':'bad';
+     tr.appendChild(td);
+    });
+    output.appendChild(tr);
+    ci=0;si++;
+   }
+   status.textContent='Обработени '+(si*52+ci)+' / '+(scenarios.length*52)+' образци…';
+   setTimeout(progress,0);
+  }
+  progress();
+ });
+})();
+</script></body></html>
