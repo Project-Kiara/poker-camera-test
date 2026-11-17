@@ -100,7 +100,7 @@
     return {cards:cards.length,ranks:RANKS.length,suits:SUITS.length,
      variantsPerReference:settings.length,rankVariants:lists.rank.length,
      suitVariants:lists.suit.length,
-     screenshotCalibratedCards:cards.filter(function(c){return c.calibrated;}).length,
+     cardsWithCalibratedComponents:cards.filter(function(c){return c.calibrated;}).length,
      syntheticCards:cards.filter(function(c){return c.synthetic;}).length,
      warning:'Синтетичните комбинации не са проверени със снимки на всички 52 карти.'};
    }
