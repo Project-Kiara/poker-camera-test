@@ -27,9 +27,9 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r25 · OCR r15 (префлоп раздавания + позиционна памет) · 17.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r28 · OCR r16 (размазани лични карти и защита на борда) · 17.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
-  '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r26">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r26">Проверка със снимани символи</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
+  '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r28">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r26">Проверка със снимани символи</a> · <a href="./ocr-hero-overlap-tests.html?v=r28">Тест: близки карти и аватар</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
   '<label><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>',
   '<label><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label>',
@@ -448,6 +448,16 @@
     lastSignature=signature;
     var isStable=repeats>=2;
     emitText(result,isStable);
+    // Never leave stale win/lose/tie percentages visible during an
+    // unresolved camera frame. Simulations resume after stable confirmation.
+    var unsafeFrame=result.temporalConflict||!result.uniqueCards||!result.stageConfirmed||
+      (result.board.length>=3&&!result.boardComplete)||
+      (result.hero.length===2&&result.hero.some(function(c){return !c.code;})&&ownCodes.length===2);
+    if(!isStable&&unsafeFrame){
+      suspendAnalysis(result.temporalReason==='missing-board-card'?
+        'Неясен етап: предишна обща карта временно липсва. Изчисленията са спрени.':
+        'Картите още не са потвърдени. Изчисленията са спрени.');
+    }
     document.dispatchEvent(new CustomEvent('poker:vision-frame',{detail:{
      result:result,confirmed:isStable,frameWidth:frame.width,frameHeight:frame.height
     }}));
