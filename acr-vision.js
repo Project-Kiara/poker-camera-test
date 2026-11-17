@@ -244,7 +244,12 @@ function classify(img,box){
  if(!rank||!suit)return {box:box,code:null,rank:rank&&rank.accepted?rank.key:null,
   suit:suit&&suit.accepted?suit.key:null,rankDetected:!!rank,suitDetected:!!suit,
   reason:'Неясен символ в ъгъла на картата'};
- var validColor=rank.isRed===suit.isRed&&((suit.key==='h'||suit.key==='d')===suit.isRed);
+ // Four-colour decks may use blue diamonds and green clubs. Require
+ // matching corner-ink classification; allow nontraditional colour only
+ // with stronger independent rank and suit glyph evidence.
+ var standardColor=((suit.key==='h'||suit.key==='d')===suit.isRed);
+ var validColor=rank.isRed===suit.isRed&&
+   (standardColor||(rank.score>=.80&&suit.score>=.80&&rank.margin>=.07&&suit.margin>=.07));
  var rankOk=rank.accepted,suitOk=suit.accepted&&validColor;
  var good=rankOk&&suitOk;
  return {box:box,code:good?rank.key+suit.key:null,
