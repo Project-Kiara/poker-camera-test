@@ -135,7 +135,7 @@
     }
     var exact = spaces <= EXACT_LIMIT;
     var total = exact ? spaces : iterations;
-    var count = 0, wins = 0, losses = 0, ties = 0, share = 0, shareSquares = 0;
+    var count = 0, wins = 0, losses = 0, ties = 0, share = 0;
     var categories = [0,0,0,0,0,0,0,0,0];
 
     // Lazy combination generators never store the full enumeration in RAM.
@@ -189,7 +189,6 @@
       else if (winnerCount > 1) {ties++; part = 1 / winnerCount;}
       else {wins++; part = 1;}
       share += part;
-      shareSquares += part * part;
       count++;
     }
     function runRandom() {
@@ -208,9 +207,11 @@
       var denom = count || 1;
       var margin = null;
       if (exact) margin = 0;
-      else if (count > 1) {
-        var variance = Math.max(0, (shareSquares - share * share / count) / (count - 1));
-        margin = 100 * 1.96 * Math.sqrt(variance / count);
+      else if (count > 0) {
+        // Hoeffding's two-sided 95% bound for bounded split-pot equity in [0,1].
+        // Unlike a normal approximation it does not imply zero uncertainty
+        // if all sampled outcomes happened to be wins.
+        margin = 100 * Math.sqrt(Math.log(40) / (2 * count));
       }
       return {
         done:count, total:total, players:players,
