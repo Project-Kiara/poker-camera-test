@@ -377,6 +377,18 @@
     var lose = document.getElementById('loseValue');
     var tie = document.getElementById('tieValue');
     var generation = 0;
+    var mathWorker = null;
+    var exactCache = new Map();
+    function stopMathWorker() {
+      if (mathWorker) { mathWorker.terminate(); mathWorker = null; }
+    }
+    function cachedExact(key) { return exactCache.get(key) || null; }
+    function rememberExact(key, result) {
+      if (!result.exact) return;
+      if (exactCache.has(key)) exactCache.delete(key);
+      exactCache.set(key, result);
+      if (exactCache.size > 24) exactCache.delete(exactCache.keys().next().value);
+    }
     var rankList = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
     var suitList = 'cdhs';
     var symbols = '♣♦♥♠';
@@ -422,6 +434,7 @@
     }
     function markChanged() {
       generation++;
+      stopMathWorker();
       runButton.disabled = false;
       clearResults();
       message.className = 'analysis-message';
@@ -450,7 +463,7 @@
       return v;
     }
     function pct(value) { return value.toFixed(1).replace('.',',') + '%'; }
-    function show(result, pot, call) {
+    function show(result, pot, call, elapsedMs, reused) {
       win.textContent = pct(result.win);
       lose.textContent = pct(result.loss);
       tie.textContent = pct(result.tie);
@@ -471,6 +484,13 @@
         if(memory.knownOpponents.length)addLine('Разкрити активни чужди ръце',String(memory.knownOpponents.length));
       }
       addLine('Метод', result.exact ? 'Точно изброяване на всички възможности' : 'Monte Carlo — случайна извадка');
+      if (reused) addLine('Повторно използване', 'Запазен точен резултат, без ново изчисление.');
+      if (typeof elapsedMs === 'number' && Number.isFinite(elapsedMs)) {
+        addLine('Време на изчисление', Math.round(elapsedMs) + ' ms');
+        if (elapsedMs >= 1 && result.done >= 100)
+          addLine('Обработени сценарии в секунда',
+            Math.round(result.done / elapsedMs * 1000).toLocaleString('bg-BG'));
+      }
       addLine(result.exact ? 'Изброени възможности' : 'Симулирани раздавания',
         result.done.toLocaleString('bg-BG'));
       if (!result.exact && typeof result.equityMargin95 === 'number') {
@@ -495,13 +515,25 @@
       ranked.sort(function(a,b){return b.percentage-a.percentage;});
       addLine('Най-вероятна крайна комбинация', ranked[0].name + ' (' + pct(ranked[0].percentage) + ')');
     }
+    function showPreview(state) {
+      if (state.exact || state.done < 240) return;
+      win.textContent = pct(state.win);
+      lose.textContent = pct(state.loss);
+      tie.textContent = pct(state.tie);
+      message.textContent = 'Предварителна оценка: ' +
+        state.done.toLocaleString('bg-BG') + ' / ' +
+        state.total.toLocaleString('bg-BG') +
+        ' симулации — резултатът още се уточнява.';
+    }
     runButton.addEventListener('click', function () {
       generation++;
+      stopMathWorker();
       var current = generation;
-      var simulation, pot, call;
+      var simulator, input, pot, call;
       try {
         var hero = getSelected(heroSelects);
-        if (hero[0] === null || hero[1] === null) throw new Error('Избери и двете си лични карти.');
+        if (hero[0] === null || hero[1] === null)
+          throw new Error('Избери и двете си лични карти.');
         var ordered = getSelected(boardSelects), board = [];
         var gaps = false;
         ordered.forEach(function(v) {
@@ -511,43 +543,118 @@
             board.push(v);
           }
         });
-        if(!window.PokerDealBridge)throw new Error('Модулът за паметта не е зареден. Презареди страницата.');
-        var remembered=window.PokerDealBridge.context();
+        if (!window.PokerDealBridge) throw new Error('Модулът за паметта не е зареден.');
+        var remembered = window.PokerDealBridge.context();
         var dead = parseDeadCards(document.getElementById('deadCards').value).concat(remembered.dead);
-        pot = getNonnegativeNumber('pot'); call = getNonnegativeNumber('callAmount');
-        if ((pot === null) !== (call === null)) throw new Error('За пот оддс въведи и пота, и сумата за кол.');
-        simulation = math.simulator({
-          hero: hero, board: board, dead: dead, knownOpponents: remembered.knownOpponents,
-          players: Number(document.getElementById('players').value),
-          iterations: Number(document.getElementById('simCount').value)
-        });
+        pot = getNonnegativeNumber('pot');
+        call = getNonnegativeNumber('callAmount');
+        if ((pot === null) !== (call === null))
+          throw new Error('За пот оддс въведи и пота, и сумата за кол.');
+        input = {
+          hero:hero, board:board, dead:dead,
+          knownOpponents:remembered.knownOpponents,
+          players:Number(document.getElementById('players').value),
+          iterations:Number(document.getElementById('simCount').value)
+        };
+        simulator = math.simulator(input);
       } catch(err) {
         clearResults();
         message.textContent = err.message;
         message.className = 'analysis-message error';
+        runButton.disabled = false;
+        return;
+      }
+      var key = JSON.stringify(input);
+      var previous = cachedExact(key);
+      if (previous) {
+        show(previous, pot, call, 0, true);
+        message.textContent = 'Готово — точният резултат е взет от паметта.';
+        runButton.disabled = false;
         return;
       }
       runButton.disabled = true;
       clearResults();
       message.className = 'analysis-message';
-      function nextBatch() {
+      message.textContent = 'Изчислявам…';
+
+      function finish(state, elapsedMs) {
         if (current !== generation) return;
-        var complete = simulation.batch(60);
-        var state = simulation.result();
-        if (complete) {
-          show(state, pot, call);
-          message.textContent = state.exact ?
-            'Готово — всички възможни раздавания са изчислени.' :
-            'Готово — симулациите са завършени.';
-          runButton.disabled = false;
-        } else {
-          message.textContent = (state.exact ? 'Точно изброяване: ' : 'Monte Carlo: ') +
-            state.done.toLocaleString('bg-BG') + ' / ' +
-            state.total.toLocaleString('bg-BG') + ' раздавания…';
-          setTimeout(nextBatch, 0);
-        }
+        stopMathWorker();
+        rememberExact(key, state);
+        show(state, pot, call, elapsedMs, false);
+        message.textContent = state.exact ?
+          'Готово — всички възможни раздавания са проверени.' :
+          'Готово — симулациите са завършени.';
+        runButton.disabled = false;
       }
-      setTimeout(nextBatch, 0);
+      function runFallback(note) {
+        if (current !== generation) return;
+        message.textContent = note || 'Изчисляване в браузъра…';
+        var begin = performance.now(), lastPreview = begin;
+        function nextBatch() {
+          if (current !== generation) return;
+          try {
+            var complete = simulator.batch(400);
+            var state = simulator.result();
+            var elapsed = performance.now() - begin;
+            if (complete) {
+              finish(state, elapsed);
+            } else {
+              if (!state.exact && state.done >= 240 && performance.now() - lastPreview >= 130) {
+                showPreview(state);
+                lastPreview = performance.now();
+              } else if (state.exact) {
+                message.textContent = 'Точно изброяване: ' +
+                  state.done.toLocaleString('bg-BG') + ' / ' +
+                  state.total.toLocaleString('bg-BG') + ' раздавания…';
+              }
+              setTimeout(nextBatch, 0);
+            }
+          } catch(err) {
+            if (current !== generation) return;
+            clearResults();
+            message.textContent = 'Грешка при изчисление: ' + err.message;
+            message.className = 'analysis-message error';
+            runButton.disabled = false;
+          }
+        }
+        setTimeout(nextBatch, 0);
+      }
+      if (typeof Worker === 'undefined') {
+        runFallback('Фоновите изчисления не се поддържат. Използвам резервен режим.');
+        return;
+      }
+      try {
+        var worker = new Worker('./equity-worker.js?v=progressive-r17');
+        mathWorker = worker;
+        worker.onmessage = function(e) {
+          if (current !== generation || mathWorker !== worker) return;
+          var data = e.data || {};
+          if (data.jobId !== current) return;
+          if (data.type === 'progress') {
+            if (data.result.exact) {
+              message.textContent = 'Точно изброяване: ' +
+                data.result.done.toLocaleString('bg-BG') + ' / ' +
+                data.result.total.toLocaleString('bg-BG') + ' раздавания…';
+            } else showPreview(data.result);
+          } else if (data.type === 'final') {
+            finish(data.result, data.elapsedMs);
+          } else if (data.type === 'error') {
+            stopMathWorker();
+            runFallback('Фоновото изчисление не успя. Преминавам в резервен режим.');
+          }
+        };
+        worker.onerror = function(e) {
+          if (current !== generation || mathWorker !== worker) return;
+          if (e.preventDefault) e.preventDefault();
+          stopMathWorker();
+          runFallback('Фоновият модул не е достъпен. Изчислявам в страницата.');
+        };
+        worker.postMessage({type:'calculate',jobId:current,input:input});
+      } catch(err) {
+        stopMathWorker();
+        runFallback('Изчислявам в браузъра…');
+      }
     });
     clearButton.addEventListener('click', function () {
       heroSelects.concat(boardSelects).forEach(function(el){el.value='';});
