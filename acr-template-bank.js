@@ -42,6 +42,25 @@
   }
   return union?common/union:0;
  }
+ // Packed bitsets make each comparison 18 words instead of 576 pixels.
+ function bitsFromMask(mask){
+  var words=new Uint32Array(18);
+  for(var i=0;i<576;i++)if(mask[i])words[i>>>5]|=1<<(i&31);
+  return words;
+ }
+ function popcount(v){
+  v=v-((v>>>1)&0x55555555);
+  v=(v&0x33333333)+((v>>>2)&0x33333333);
+  return (((v+(v>>>4))&0x0f0f0f0f)*0x01010101)>>>24;
+ }
+ function packedSimilarity(a,b){
+  var common=0,all=0;
+  for(var i=0;i<18;i++){
+   common+=popcount(a[i]&b[i]);
+   all+=popcount(a[i]|b[i]);
+  }
+  return all?common/all:0;
+ }
  function create(base) {
   var lists={rank:[],suit:[]},byKey={rank:Object.create(null),suit:Object.create(null)};
   var rankKeys=Object.create(null),suitKeys=Object.create(null),realRank=Object.create(null),realSuit=Object.create(null);
@@ -57,7 +76,8 @@
     var arr=[];
     selected.forEach(function(e){
      settings.forEach(function(options){
-      arr.push({key:key,mask:warp(e.mask,options),
+      var mask=warp(e.mask,options);
+      arr.push({key:key,bits:bitsFromMask(mask),
        provenance:e.provenance==='acr'?'acr-variant':'synthetic-variant'});
      });
     });
@@ -78,10 +98,11 @@
   function match(mask,kind){
    if(!mask||mask.length!==576||!byKey[kind])return {first:null,second:null};
    var best=null,next=null,keys=kind==='rank'?RANKS:SUITS.split('');
+   var query=bitsFromMask(mask);
    keys.forEach(function(key){
     var value=null,refs=byKey[kind][key];
     for(var i=0;i<refs.length;i++){
-     var e=refs[i],score=similarity(mask,e.mask);
+     var e=refs[i],score=packedSimilarity(query,e.bits);
      // A rotated synthetic font is weaker evidence than an ACR screenshot.
      if(e.provenance==='synthetic-variant')score-=.065;
      else score-=.025;
@@ -106,5 +127,5 @@
    }
   };
  }
- root.ACRTemplateBank={create:create,warp:warp,similarity:similarity};
+ root.ACRTemplateBank={create:create,warp:warp,similarity:similarity,packedSimilarity:function(a,b){return packedSimilarity(bitsFromMask(a),bitsFromMask(b));}};
 }(typeof window!=='undefined'?window:globalThis));
