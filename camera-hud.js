@@ -36,7 +36,7 @@
   var size=fitCanvas();
   if(!detail||!detail.result||!detail.frameWidth||!detail.frameHeight)return;
   var imageW=video.videoWidth||detail.frameWidth,imageH=video.videoHeight||detail.frameHeight;
-  var fit=Math.min(size.width/imageW,size.height/imageH);
+  var fit=Math.max(size.width/imageW,size.height/imageH); // match video object-fit:cover
   var displayedW=imageW*fit,displayedH=imageH*fit;
   var ox=(size.width-displayedW)/2,oy=(size.height-displayedH)/2;
   var scaleX=displayedW/detail.frameWidth,scaleY=displayedH/detail.frameHeight;
