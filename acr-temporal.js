@@ -113,10 +113,10 @@
        card.code=null;card.rank=null;card.suit=null;
        card.temporalConflict=true;
        result.temporalConflict=true;
-       return;
+       continue;
       }
       tr.conflicts=0;tr.conflict='';
-      if(colorError){card.code=null;return;}
+      if(colorError){card.code=null;continue;}
       // The rectangle is still visible and no recognized glyph contradicts
       // the previous locked identity. Keep that card briefly while OCR blurs.
       if(now-tr.lockedAt<=LOCK_MS){
@@ -129,9 +129,9 @@
        // its own evidence. Only a fresh complete OCR reading does that.
        if(code===tr.locked)tr.lockedAt=now;
       }
-      return;
+      continue;
      }
-     if(colorError)return;
+     if(colorError)continue;
      if(rank||suit)tr.samples.push({rank:rank,suit:suit,time:now});
      tr.samples=tr.samples.slice(-6);
      var r={},s={};
