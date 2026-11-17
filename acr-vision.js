@@ -129,7 +129,7 @@ function fallbackTemplates(kind){
  FALLBACK_CACHE={rank:[],suit:[]};
  var fonts=['Arial','Helvetica','Verdana','Tahoma','Georgia','sans-serif'];
  for(var k=0;k<OCR_RANKS.length;k++){
-  var rank=OCR_RANKS[k],texts=[rank];
+  var rank=OCR_RANKS[k],texts=rank==='10'?['10','T']:[rank];
   for(var f=0;f<fonts.length;f++)for(var v=0;v<texts.length;v++){
    var template=synthGlyph(texts[v],fonts[f],f%2?'900':'700');
    if(template)FALLBACK_CACHE.rank.push({key:rank,mask:template});
