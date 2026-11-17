@@ -18,7 +18,7 @@ function createTracker(options){
     var key=hasHero?hero.slice().sort().join('|'):'';
     var preflop=result.stage==='Префлоп'&&(result.board||[]).length===0;
     var isNew=preflop&&hasHero&&(sawBoard||(heroId&&key!==heroId));
-    var forced=!!(result.forceNewHand&&hasHero&&
+    var forced=!!(result.forceNewHand&&
       (board.length>=3||preflop));
    if(forced){
      hand++;clear();
