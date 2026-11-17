@@ -8,6 +8,7 @@
  section.className='panel';section.id='autoRecognition';
  section.innerHTML=[
   '<h2>Автоматично разпознаване · ACR Poker</h2>',
+  '<p class="hint">Поддържа 10 и T за десетка. След снимка вероятностите се обновяват автоматично само при потвърдени карти.</p>',
   '<div class="reading-summary">',
   '<p id="visionStage">Етап: —</p>',
   '<p id="visionCards" style="color:#e1f8ee">Общи карти: —</p>',
@@ -312,7 +313,16 @@
   emitText(result,confirmed);
   diagnostics(result,sourceInfo);
   seatLine.textContent+=' · обработка '+(Date.now()-start)+' ms';
-  if(confirmed&&ingestMemory(result))applyResult(result);
+  if(confirmed&&ingestMemory(result)){
+   applyResult(result);
+   // A still photograph is an independent analysis request: recalculate even
+   // when the cards match the previous video frame.
+   if(sourceInfo && sourceInfo.originalWidth &&
+      getField('hero0')!=='' && getField('hero1')!==''){
+     var run=document.getElementById('runAnalysis');
+     if(run && !run.disabled)run.click();
+   }
+  }
   return result;
  }
  function canvasImage(element,fullResolution){
@@ -391,7 +401,7 @@
    frameWorking=true;
    try{
     var startedAt=Date.now();
-    var result=vision.analyze(canvasImage(video,false));
+    var result=vision.analyze(canvasImage(video,true));
     var signature=result.stage+','+result.board.map(function(c){return c.code||'?';}).join('|')+','+
        result.hero.map(function(c){return c.code||'?';}).join('|')+','+result.coveredHands;
     repeats=signature===lastSignature?repeats+1:1;
