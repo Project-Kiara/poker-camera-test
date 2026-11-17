@@ -11,7 +11,8 @@ function createTracker(options){
       dead:keys(dead),knownOpponents:keys(showdown).map(function(k){return showdown[k].slice();}),
       boardSeen:sawBoard,heroIdentity:heroId,boardIdentity:boardIdentity.slice(),resetPending:pendingFrames};}
   function observe(result){
-    if(!result||result.stageConfirmed!==true||result.uniqueCards!==true){pending='';pendingFrames=0;return snapshot();}
+    if(!result||result.stageConfirmed!==true||result.uniqueCards!==true||
+      result.temporalConflict||result.incompleteBoard||result.incompleteHero){pending='';pendingFrames=0;return snapshot();}
     var board=codes(result.board),hero=codes(result.hero),outs=codes(result.others);
     var hasHero=(result.hero||[]).length===2&&hero.length===2&&hero[0]!==hero[1];
     var key=hasHero?hero.slice().sort().join('|'):'';
