@@ -8,9 +8,9 @@ p{color:#c1d1e2}a{color:#a1d9ff}li{padding:7px;border-bottom:1px solid #35465b}.
 <button id="start" type="button">Пусни тестовете</button>
 <p id="result" role="status">Тестът не е стартиран.</p><ol id="checks"></ol>
 <p><a href="./">Назад към камерата</a> · <a href="./ocr-photo-mask-test.html?v=r27">OCR снимани символи</a></p>
-<script src="./card-detector.js?v=merged-hero-r11"></script>
+<script src="./card-detector.js?v=right-hero-r32"></script>
 <script src="./acr-template-bank.js?v=packed-r20"></script>
-<script src="./acr-vision.js?v=hero-corner-r27"></script>
+<script src="./acr-vision.js?v=right-hero-r32"></script>
 <script>
 (function(){
 'use strict';
@@ -69,6 +69,32 @@ function run(){
     result.hero[0].code===scenes[k][0]&&result.hero[1].code===scenes[k][1]&&
     result.uniqueCards);
  }
+ // Regression based on the reported failure: the right card is darker
+ // and fails the bright-connected-component detector even though its
+ // top-left symbols remain readable. Geometry must recover it separately.
+ scenes.forEach(function(scene){
+  var image=fixture(scene,.55);
+  for(var y=top;y<top+cardH;y++)for(var x=lefts[1];x<lefts[1]+cardW;x++){
+   var p=(y*W+x)*4;
+   for(var c=0;c<3;c++)image.data[p+c]=Math.round(image.data[p+c]*.77);
+  }
+  var detected=PokerCardDetector.detect(image);
+  var found=ACRVision.analyze(image);
+  check(scene.join(' ')+' | по-тъмна дясна карта, извлечена по отделен контур',
+   detected.length===1&&found.guidedBoxes===1&&
+   found.hero.length===2&&found.hero[0].code===scene[0]&&
+   found.hero[1].code===scene[1]);
+ });
+ // A green table beside a single genuine card must never be hallucinated
+ // into a second card; independent bright-pixel evidence is mandatory.
+ var empty=fixture(['4s','10s'],0);
+ for(var yy=top;yy<top+cardH;yy++)for(var xx=lefts[1];xx<lefts[1]+cardW;xx++){
+  var pos=(yy*W+xx)*4;
+  empty.data[pos]=26;empty.data[pos+1]=85;empty.data[pos+2]=45;
+ }
+ var lone=ACRVision.analyze(empty);
+ check('Без истинска втора карта не се създава фалшива лична карта',
+  lone.guidedBoxes===0&&lone.hero.length!==2);
  return tests;
 }
 document.getElementById('start').addEventListener('click',function(){
