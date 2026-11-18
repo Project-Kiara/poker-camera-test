@@ -27,7 +27,7 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r30 · OCR r18 (Smart Recognition Lock) · 17.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r31 · OCR r18 (Smart Recognition Lock) · 17.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
   '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r28">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r26">Проверка със снимани символи</a> · <a href="./ocr-hero-overlap-tests.html?v=r28">Тест: близки карти и аватар</a> · <a href="./ocr-smart-lock-tests.html?v=r30">Тест: Smart Recognition Lock</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
