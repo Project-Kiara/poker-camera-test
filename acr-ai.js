@@ -7,10 +7,22 @@
  'use strict';
  var MODEL='https://huggingface.co/sroot/lgd-cards-gen3/resolve/main/model.onnx';
  var CLASSES='https://huggingface.co/sroot/lgd-cards-gen3/resolve/main/model.classes.json';
- var RUNTIME='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
+ // WebKit/iOS has documented WASM memory regressions in newer runtimes.
+ // 1.18.0 single-threaded, scalar WASM is the conservative Safari fallback.
+ var IS_IOS=!!(root.navigator&&/iPhone|iPad|iPod/.test(root.navigator.userAgent));
+ var ORT_VERSION=IS_IOS?'1.18.0':'1.22.0';
+ var RUNTIME='https://cdn.jsdelivr.net/npm/onnxruntime-web@'+ORT_VERSION+'/dist/';
+ var RUNTIME_FALLBACK='https://unpkg.com/onnxruntime-web@'+ORT_VERSION+'/dist/';
+ // From the upstream Gen 3 model card, in the exact ONNX class order.
+ var BASE_RANKS=['10','2','3','4','5','6','7','8','9','A','J','K','Q'];
+ var BASE_SUITS=['C','D','H','S'];
+ var BASE_CLASSES=[];
+ BASE_RANKS.forEach(function(r){BASE_SUITS.forEach(function(s){BASE_CLASSES.push(r+s);});});
+ var labelSource='remote';
  var MIN_CONFIDENCE=.86, MAX_ATTEMPTS=1, RETRY_MS=1900;
  var session=null, classes=null, state='idle', message='', loadPromise=null;
  var listeners=[], attempts=Object.create(null), sourceCanvas=null, sourceContext=null;
+ var stage='not-started';
  var inputCanvas=null, inputContext=null;
  function notify(next,detail){
   state=next;message=detail||'';
@@ -23,11 +35,21 @@
   if(root.ort&&root.ort.InferenceSession)return Promise.resolve(root.ort);
   return new Promise(function(resolve,reject){
    if(typeof document==='undefined'){reject(new Error('Browser required'));return;}
-   var script=document.createElement('script');
-   script.src=RUNTIME+'ort.wasm.min.js';script.async=true;script.crossOrigin='anonymous';
-   script.onload=function(){root.ort&&root.ort.InferenceSession?resolve(root.ort):reject(new Error('ONNX Runtime not available'));};
-   script.onerror=function(){reject(new Error('ONNX Runtime download failed'));};
-   document.head.appendChild(script);
+   function tryCdn(url,alternate){
+    var script=document.createElement('script');
+    script.src=url+'ort.wasm.min.js';script.async=true;script.crossOrigin='anonymous';
+    script.onload=function(){
+     if(root.ort&&root.ort.InferenceSession){RUNTIME=url;resolve(root.ort);}
+     else if(alternate)tryCdn(RUNTIME_FALLBACK,false);
+     else reject(new Error('ONNX Runtime JavaScript did not initialize'));
+    };
+    script.onerror=function(){
+     if(alternate)tryCdn(RUNTIME_FALLBACK,false);
+     else reject(new Error('ONNX Runtime download failed from both CDNs'));
+    };
+    document.head.appendChild(script);
+   }
+   tryCdn(RUNTIME,true);
   });
  }
  function namesFromJson(data){
@@ -38,26 +60,43 @@
    throw new Error('Invalid 52-card label metadata');
   return values;
  }
+ function loadLabels(){
+  stage='списък карти';
+  return fetch(CLASSES).then(function(response){
+   if(!response.ok)throw new Error('HTTP '+response.status);
+   return response.json().then(namesFromJson);
+  }).then(function(values){
+   labelSource='remote';return values;
+  },function(err){
+   // If only the external labels fail, retain the verified official class order.
+   labelSource='embedded ('+String(err&&err.message||err).slice(0,55)+')';
+   return BASE_CLASSES.slice();
+  });
+ }
  function start(){
   if(loadPromise)return loadPromise;
-  notify('loading','Изтегляне на AI модела…');
-  loadPromise=Promise.all([loadRuntime(),fetch(CLASSES).then(function(response){
-   if(!response.ok)throw new Error('Missing model labels ('+response.status+')');
-   return response.json();
-  }).then(namesFromJson)]).then(function(parts){
+  stage='JS библиотека и списък карти';
+  notify('loading','Подготвям резервния AI…');
+  loadPromise=Promise.all([loadRuntime(),loadLabels()]).then(function(parts){
    var ort=parts[0];classes=parts[1];
+   stage='ONNX/WASM модел';
+   notify('loading','Изтеглям и стартирам ONNX модела…');
    ort.env.wasm.wasmPaths=RUNTIME;ort.env.wasm.numThreads=1;
+   if(IS_IOS&&'simd' in ort.env.wasm)ort.env.wasm.simd=false;
    if('proxy' in ort.env.wasm)ort.env.wasm.proxy=false;
    return ort.InferenceSession.create(MODEL,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
   }).then(function(model){
    session=model;
    if(!session.inputNames||session.inputNames.length!==1||!session.outputNames||!session.outputNames.length)
     throw new Error('Unexpected ONNX inputs or outputs');
-   notify('ready','52 класа; резервният AI е готов');
+   stage='готов';notify('ready','52 класа; етикети: '+labelSource);
    return true;
   }).catch(function(err){
-   session=null;notify('unavailable',err&&err.message?err.message:String(err));
-   // The existing OCR remains fully usable.
+   session=null;
+   var detail=String(err&&err.message||err).slice(0,220);
+   notify('unavailable',stage+': '+detail);
+   // Permit an explicit retry when the network is restored.
+   loadPromise=null;
    return false;
   });
   return loadPromise;
@@ -173,7 +212,7 @@
  function resetHand(){attempts=Object.create(null);}
  root.ACRAI={
   start:start,subscribe:subscribe,enrich:enrich,resetHand:resetHand,
-  status:function(){return {state:state,message:message};},
+  status:function(){return {state:state,message:message,stage:stage,labelSource:labelSource,runtime:ORT_VERSION};},
   rankOutput:rankOutput,namesFromJson:namesFromJson
  };
 }(typeof window!=='undefined'?window:globalThis));

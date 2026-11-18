@@ -212,6 +212,16 @@
       }
     }
 
+    #aiErrorDetail {
+      position:fixed;top:calc(max(12px, env(safe-area-inset-top)) + 128px);
+      right:max(12px, env(safe-area-inset-right));z-index:6;
+      width:min(238px,55vw);padding:6px 8px;border-radius:8px;
+      background:rgba(55,18,28,.79);border:1px solid rgba(255,179,180,.28);
+      color:#ffe2e2;font-size:10px;line-height:1.28;
+      white-space:normal;overflow-wrap:anywhere;pointer-events:none;
+    }
+    #aiErrorDetail[hidden]{display:none!important}
+    #aiStatus[data-state="unavailable"]{cursor:pointer;pointer-events:auto;border-color:rgba(255,180,180,.5);color:#fff1f1!important;}
     /* Small live AI status: visible above the full-screen camera preview. */
     #aiStatus {
       position:fixed;
@@ -244,7 +254,8 @@
       </div>
     </div>
     <div class="camera-state" aria-live="polite">
-      <span id="status">Състояние: не е стартирана.</span> <span id="aiStatus" role="status" title="AI се зарежда отделно от камерата" style="font-size:11px;color:#98e3ff;margin-left:8px">AI: зарежда се…</span>
+      <span id="status">Състояние: не е стартирана.</span> <span id="aiStatus" role="status" tabindex="0" title="AI се зарежда отделно от камерата" style="font-size:11px;color:#98e3ff;margin-left:8px">AI: зарежда се…</span>
+      <span id="aiErrorDetail" hidden></span>
       <details><summary>Детайли</summary><p id="details">Разрешението за камера ще бъде поискано след натискане на бутона.</p></details>
     </div>
 
@@ -684,17 +695,32 @@
 <script src="./acr-vision.js?v=right-hero-r32"></script>
   <script src="./acr-temporal.js?v=right-hero-r32"></script>
   <script src="./acr-smart-lock.js?v=right-hero-r32"></script>
-  <script src="./acr-ai.js?v=ai-warm-r33"></script>
+  <script src="./acr-ai.js?v=safari-memory-r35"></script>
   <script>
   (function(){
     var ai=window.ACRAI,indicator=document.getElementById('aiStatus');
+    var errorLine=document.getElementById('aiErrorDetail');
     if(!ai||!indicator)return;
     ai.subscribe(function(status){
       var labels={idle:'AI: подготвя се',loading:'AI: зарежда се…',ready:'AI готов',
-        unavailable:'AI недостъпен · стандартно разпознаване'};
+        unavailable:'AI недостъпен · натисни за повторен опит'};
       indicator.textContent=labels[status.state]||'AI: неизвестно състояние';
+      indicator.dataset.state=status.state;
       indicator.title=status.message||'';
+      if(errorLine){
+        errorLine.hidden=status.state!=='unavailable';
+        errorLine.textContent=status.state==='unavailable'?
+          'Причина: '+(status.message||'неизвестна грешка'):'';
+      }
     });
+    function retry(){
+      if(ai.status().state==='unavailable')ai.start();
+    }
+    indicator.addEventListener('click',retry);
+    indicator.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();retry();}
+    });
+    window.addEventListener('online',retry);
     // Run automatically, without blocking the camera authorization or classic OCR.
     setTimeout(function(){ai.start();},0);
   })();
