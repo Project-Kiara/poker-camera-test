@@ -31,8 +31,9 @@
   });
  }
  function namesFromJson(data){
-  var values=Array.isArray(data)?data:
-    data&&typeof data==='object'?Object.keys(data).sort(function(a,b){return Number(a)-Number(b);}).map(function(k){return data[k];}):[];
+  var source=data&&typeof data==='object'&&data.names?data.names:data;
+  var values=Array.isArray(source)?source:
+    source&&typeof source==='object'?Object.keys(source).sort(function(a,b){return Number(a)-Number(b);}).map(function(k){return source[k];}):[];
   if(values.length!==52||!values.every(function(v){return typeof v==='string'&&/^(?:10|[2-9AJQK])[CDHS]$/.test(v);}))
    throw new Error('Invalid 52-card label metadata');
   return values;
@@ -119,10 +120,13 @@
    confidence:top,margin:Math.max(0,top-second)}:null;
  }
  function maybeAttach(card,candidate,already){
-  if(!card||card.code||card.reused||!candidate)return false;
+  if(!card||card.code||card.reused||card.locked||!candidate)return false;
   var code=candidate.code;
   if(candidate.confidence<MIN_CONFIDENCE||candidate.margin<.18||already.has(code))return false;
   if(!/^(?:10|[2-9AJQK])[cdhs]$/.test(code))return false;
+  // A confident AI vote must not contradict independently visible OCR glyphs.
+  if(card.rank&&card.rank!==code.slice(0,-1))return false;
+  if(card.suit&&card.suit!==code.slice(-1))return false;
   card.code=code;card.rank=code.slice(0,-1);card.suit=code.slice(-1);
   card.rankScore=Math.round(candidate.confidence*100);
   card.suitScore=Math.round(candidate.confidence*100);
@@ -140,14 +144,15 @@
  }
  async function enrich(img,result){
   if(state!=='ready'||!session||!result||!img||!img.data)return result;
-  var unrecognized=(result.hero||[]).filter(function(c){return c.box&&!c.code&&!c.pendingCode;})
-   .concat((result.board||[]).filter(function(c){return c.box&&!c.code&&!c.pendingCode;}));
+  var unrecognized=(result.hero||[]).filter(function(c){return c.box&&!c.code&&!c.reused;})
+   .concat((result.board||[]).filter(function(c){return c.box&&!c.code&&!c.reused;}));
   if(!unrecognized.length)return result;
   var used=new Set(result.visible.filter(function(c){return !!c.code;}).map(function(c){return c.code;}));
   var now=Date.now(),updated=0,tried=0;
   for(var i=0;i<unrecognized.length&&tried<MAX_ATTEMPTS;i++){
    var card=unrecognized[i],box=card.box;
-   var key=Math.round(box.x/12)+':'+Math.round(box.y/12)+':'+Math.round(box.width/12)+':'+Math.round(box.height/12);
+   var key=((result.hero||[]).indexOf(card)!==-1?'hero:':'board:')+
+    Math.round(box.x/12)+':'+Math.round(box.y/12)+':'+Math.round(box.width/12)+':'+Math.round(box.height/12);
    if(now-(attempts[key]||0)<RETRY_MS)continue;
    attempts[key]=now;tried++;
    try{
