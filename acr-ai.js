@@ -8,7 +8,7 @@
  var MODEL='https://huggingface.co/sroot/lgd-cards-gen3/resolve/main/model.onnx';
  var CLASSES='https://huggingface.co/sroot/lgd-cards-gen3/resolve/main/model.classes.json';
  var RUNTIME='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
- var MIN_CONFIDENCE=.82, MAX_ATTEMPTS=1, RETRY_MS=1900;
+ var MIN_CONFIDENCE=.86, MAX_ATTEMPTS=1, RETRY_MS=1900;
  var session=null, classes=null, state='idle', message='', loadPromise=null;
  var listeners=[], attempts=Object.create(null), sourceCanvas=null, sourceContext=null;
  var inputCanvas=null, inputContext=null;
@@ -24,7 +24,7 @@
   return new Promise(function(resolve,reject){
    if(typeof document==='undefined'){reject(new Error('Browser required'));return;}
    var script=document.createElement('script');
-   script.src=RUNTIME+'ort.min.js';script.async=true;script.crossOrigin='anonymous';
+   script.src=RUNTIME+'ort.wasm.min.js';script.async=true;script.crossOrigin='anonymous';
    script.onload=function(){root.ort&&root.ort.InferenceSession?resolve(root.ort):reject(new Error('ONNX Runtime not available'));};
    script.onerror=function(){reject(new Error('ONNX Runtime download failed'));};
    document.head.appendChild(script);
@@ -121,7 +121,7 @@
  function maybeAttach(card,candidate,already){
   if(!card||card.code||card.reused||!candidate)return false;
   var code=candidate.code;
-  if(candidate.confidence<MIN_CONFIDENCE||candidate.margin<.12||already.has(code))return false;
+  if(candidate.confidence<MIN_CONFIDENCE||candidate.margin<.18||already.has(code))return false;
   if(!/^(?:10|[2-9AJQK])[cdhs]$/.test(code))return false;
   card.code=code;card.rank=code.slice(0,-1);card.suit=code.slice(-1);
   card.rankScore=Math.round(candidate.confidence*100);
