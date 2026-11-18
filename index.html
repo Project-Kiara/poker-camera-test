@@ -308,7 +308,7 @@
       </div>
       <p class="fineprint">Вероятностите са ориентировъчни при случайни неизвестни карти на противниците. Не предсказват техните решения или точната им сила. Изчисленията се изпълняват само в браузъра.</p>
     </section>
-    <p class="foot">Обработката на кадрите остава локална. AI: <a href="https://huggingface.co/sroot/lgd-cards-gen3" style="color:#a5d9fa">LGD Cards Gen 3</a> (AGPL-3.0) · <a href="https://github.com/Project-Kiara/poker-camera-test" style="color:#a5d9fa">Изходен код</a>. Непотвърдените карти не се отгатват.</p>
+    <p class="foot">Само AI определя стойността и боята на картите. Обработката на кадрите остава локална. AI: <a href="https://huggingface.co/sroot/lgd-cards-gen3" style="color:#a5d9fa">LGD Cards Gen 3</a> (AGPL-3.0) · <a href="https://github.com/Project-Kiara/poker-camera-test" style="color:#a5d9fa">Изходен код</a>. Непотвърдените карти не се отгатват.</p>
   </main>
   <script>
     (function () {
@@ -692,17 +692,17 @@
   </script>
 <script src="./card-detector.js?v=right-hero-r32"></script>
   <script src="./acr-template-bank.js?v=packed-r20"></script>
-<script src="./acr-vision.js?v=right-hero-r32"></script>
+<script src="./acr-vision.js?v=ai-only-r36"></script>
   <script src="./acr-temporal.js?v=right-hero-r32"></script>
-  <script src="./acr-smart-lock.js?v=right-hero-r32"></script>
-  <script src="./acr-ai.js?v=safari-memory-r35"></script>
+  <script src="./acr-smart-lock.js?v=ai-only-r36"></script>
+  <script src="./acr-ai.js?v=ai-only-r36"></script>
   <script>
   (function(){
     var ai=window.ACRAI,indicator=document.getElementById('aiStatus');
     var errorLine=document.getElementById('aiErrorDetail');
     if(!ai||!indicator)return;
     ai.subscribe(function(status){
-      var labels={idle:'AI: подготвя се',loading:'AI: зарежда се…',ready:'AI готов',
+      var labels={idle:'AI: подготвя се',loading:'AI: зарежда се…',ready:'AI режим · готов',
         unavailable:'AI недостъпен · натисни за повторен опит'};
       indicator.textContent=labels[status.state]||'AI: неизвестно състояние';
       indicator.dataset.state=status.state;
@@ -725,7 +725,7 @@
     setTimeout(function(){ai.start();},0);
   })();
   </script>
-  <script src="./acr-auto.js?v=ai-warm-r33"></script>
+  <script src="./acr-auto.js?v=ai-only-r36"></script>
   <script src="./camera-hud.js?v=right-hero-r32"></script>
 </body>
 </html>
