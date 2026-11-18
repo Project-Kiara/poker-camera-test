@@ -346,7 +346,7 @@
       if(!eligible.some(function(b){return sameRow(c,b);}))return;
       var score=patchScore(c);
       // Most of the clean top/inner card must actually be near white.
-      if(score<.74)return;
+      if(score<.66)return;
       score+=c.fromMemory?.08:0;
       var pairCenter=(eligible[0].x+eligible[0].width*.5+
          c.x+c.width*.5)/(2*w);
