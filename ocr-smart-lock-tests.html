@@ -1,0 +1,107 @@
+<!doctype html><html lang="bg">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Recognition Lock – тестове</title>
+<style>
+body{max-width:760px;margin:20px auto;padding:0 14px;background:#111b2a;color:#edf6ff;font:15px/1.5 system-ui}
+button{background:#62e4b5;border:0;border-radius:9px;padding:12px 16px;font:700 15px system-ui}
+p{color:#bdcbdf}li{padding:7px;border-bottom:1px solid #34445c}
+.good{color:#79ecb0}.bad{color:#ff8eac}a{color:#a5d9fa}
+</style></head><body><h1>Smart Recognition Lock</h1>
+<p>Проверява пропускането на повторно OCR, редовната проверка на заключени карти, безопасното разпознаване на ново раздаване и нулирането на паметта. Тестовете използват контролирани симулирани кадри, а не камерата на телефона.</p>
+<button id="run" type="button">Пусни проверките</button><p id="status" role="status">Очаква стартиране.</p><ol id="checks"></ol>
+<p><a href="./">Към камерата</a> · <a href="./ocr-hero-overlap-tests.html">Тестове с аватар</a></p>
+<script src="./acr-temporal.js?v=smart-lock-r30"></script>
+<script src="./acr-smart-lock.js?v=smart-lock-r30"></script>
+<script>
+(function(){
+'use strict';
+function image(scene,shift){
+ var W=320,H=480,data=new Uint8ClampedArray(W*H*4);
+ for(var i=0;i<data.length;i+=4){
+  data[i]=236;data[i+1]=236;data[i+2]=236;data[i+3]=255;
+ }
+ // Draw a changed rank/suit ink pattern inside the upper-left 45% of each
+ // card, without needing any OCR or a browser canvas.
+ var xs=[80+(shift||0),175+(shift||0)];
+ scene.forEach(function(code,k){
+  var seed=0;
+  for(var i=0;i<code.length;i++)seed=(seed*47+code.charCodeAt(i))>>>0;
+  for(var y=0;y<15;y++)for(var x=0;x<12;x++){
+   seed=(Math.imul(seed,1664525)+1013904223)>>>0;
+   if((seed>>>24)%4!==0)continue;
+   var px=Math.round(xs[k]+60*(.075+(x+.5)/12*.44));
+   var py=Math.round(300+110*(.045+(y+.5)/15*.51));
+   var at=(py*W+px)*4;data[at]=30;data[at+1]=30;data[at+2]=30;
+  }
+ });
+ return {width:W,height:H,data:data,hand:scene,shift:shift||0};
+}
+function card(box,code,reused){
+ return {box:box,code:code,rank:code.slice(0,-1),suit:code.slice(-1),
+  reason:'',reused:!!reused};
+}
+function vision(){
+ return {analyze:function(img,options){
+  var hero=[],reads=0,reused=0;
+  img.hand.forEach(function(code,i){
+   var box={x:(i===0?80:175)+img.shift,y:300,width:60,height:110};
+   var cached=options.reuseCard('hero',i,box,img);
+   if(cached){hero.push(card(box,cached.code,true));reused++;}
+   else{hero.push(card(box,code,false));reads++;}
+  });
+  return {hero:hero,board:[],others:[],visible:hero,stage:'Префлоп',
+   stageConfirmed:true,uniqueCards:true,boardComplete:false,coveredHands:0,
+   ocrReads:reads,reusedReads:reused};
+ }};
+}
+function run(){
+ var tests=[],ocr=vision();
+ function check(label,yes){tests.push({label:label,pass:!!yes});}
+ var timer=1000,temporal=ACRTemporal.createTracker(),smart=ACRSmartLock.create(),logs=[];
+ function sample(hand,shift){
+  var r=smart.process(image(hand,shift),ocr,temporal,timer);
+  timer+=420;logs.push(r);return r;
+ }
+ sample(['4s','10s']);sample(['4s','10s']);
+ var locked=sample(['4s','10s']);
+ check('След две потвърждения OCR се пропуска за двете лични карти',
+  locked.reusedReads===2&&locked.ocrReads===0);
+ for(var i=0;i<7;i++)sample(['4s','10s']);
+ check('Периодичната проверка продължава, без пълен OCR при всеки кадър',
+  logs.slice(2).some(function(r){return r.ocrReads===2;})&&
+  logs.slice(2).filter(function(r){return r.reusedReads===2;}).length>=3);
+ var current=sample(['4d','9h']);
+ check('Промяната на символите предизвиква проверка, а не вечен lock',
+  current.ocrReads===2||logs.slice(-4).some(function(r){return r.ocrReads===2;}));
+ var newDeal=false,badOld=false,blocked=false,hadNew=false;
+ for(i=0;i<12;i++){
+  var frame=sample(['4d','9h']);
+  if(frame.temporalConflict)blocked=true;
+  if(frame.forceNewHand)newDeal=true;
+  if(newDeal&&frame.hero.every(function(c,i){return c.code===['4d','9h'][i];}))hadNew=true;
+  if(newDeal&&frame.hero.some(function(c){return c.code==='10s';}))badOld=true;
+ }
+ check('Новите 4♦ 9♥ се приемат след потвърждение',newDeal&&hadNew);
+ check('Картите от старото раздаване не се пренасят след потвърждението',!badOld);
+ check('По време на смяната има безопасно непотвърдено състояние',blocked);
+ var firstNew=sample(['4d','9h'],40);
+ check('При значително преместване позицията се разчита отново',
+  firstNew.ocrReads===2);
+ smart.reset();temporal.reset();
+ var cold=sample(['4d','9h']);
+ check('След спиране или ръчно нулиране започва ново разпознаване',
+  cold.ocrReads===2&&cold.reusedReads===0);
+ return tests;
+}
+document.getElementById('run').addEventListener('click',function(){
+ var out=document.getElementById('checks');out.textContent='';
+ var tests=run();
+ tests.forEach(function(t){var li=document.createElement('li');
+  li.textContent=(t.pass?'✓ ':'✗ ')+t.label;li.className=t.pass?'good':'bad';out.appendChild(li);
+ });
+ var passed=tests.filter(function(t){return t.pass;}).length;
+ document.getElementById('status').textContent=passed+'/'+tests.length+
+  ' успешно преминали симулирани проверки.';
+});
+})();
+</script></body></html>
