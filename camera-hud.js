@@ -45,19 +45,23 @@
    var b=card.box,x=ox+b.x*scaleX,y=oy+b.y*scaleY;
    var w=b.width*scaleX,h=b.height*scaleY;
    if(w<=0||h<=0)return;
-   var confirmed=!!detail.confirmed&&!!card.code;
-   ctx.strokeStyle=confirmed?color:'#ffd17a';
-   ctx.lineWidth=confirmed?2.5:1.8;
-   ctx.setLineDash(confirmed?[]:[5,4]);
+   // Show the lock for each individual position. A blurry second card
+   // must not make the confirmed left card appear to unlock.
+   var locked=!!card.locked&&!!card.code;
+   var confirmed=!!card.code&&(locked||!!detail.confirmed);
+   ctx.strokeStyle=locked?color:confirmed?'#e9d59a':'#ffd17a';
+   ctx.lineWidth=locked?3:confirmed?2:1.8;
+   ctx.setLineDash(locked||confirmed?[]:[5,4]);
    ctx.strokeRect(x,y,w,h);ctx.setLineDash([]);
-   var label=group+': '+(confirmed?window.PokerMath.label(window.PokerMath.idFromCode(card.code)):'?');
+   var label=group+': '+(card.code?window.PokerMath.label(window.PokerMath.idFromCode(card.code)):'?')+
+     (locked?' 🔒':'');
    var font=Math.max(10,Math.min(14,size.width/32));
    ctx.font='bold '+font+'px -apple-system, sans-serif';
    var lw=ctx.measureText(label).width+9,ly=y>font+7?y-4:y+font+4;
    var lx=Math.max(0,Math.min(size.width-lw,x));
    ctx.fillStyle='rgba(4,16,29,.86)';
    ctx.fillRect(lx,ly-font-2,lw,font+6);
-   ctx.fillStyle=confirmed?color:'#ffd17a';
+   ctx.fillStyle=locked?color:confirmed?'#e9d59a':'#ffd17a';
    ctx.fillText(label,lx+4,ly+1);
   }
   (detail.result.board||[]).forEach(function(c){mark(c,'#69baff','Борд');});
