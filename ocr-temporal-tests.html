@@ -111,8 +111,8 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
    f.boardComplete&&f.board.length===4&&f.board[0].code==='Jh'&&f.hero[0].code==='Qc');
   f=stable.observe(frame([card('Q','c','Qc',100),card(null,null,null,220)],
     [card('J','h','Jh',30),card('A','s','As',130),card('10','s','10s',230),
-      card('4','h','4h',330)],'Търн'),18000);
-  check('След изтичане на срока не се показва застояла 2♦',f.hero[1].code===null);
+      card('4','h','4h',330)],'Търн'),132000);
+  check('След 120 секунди без потвърждение не се показва застояла 2♦',f.hero[1].code===null);
   var newDeal=mod.createTracker();
   function oldScene(){return frame([card('8','h','8h',100),card('6','h','6h',220)],
     [card('5','s','5s',30),card('2','d','2d',130),card('5','c','5c',230)],'Флоп');}
