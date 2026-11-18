@@ -264,6 +264,103 @@
     return usable;
   }
 
+
+  // Salvage the second, closely adjacent face-up hero card when glare, a
+  // bottom seat avatar or a shared white edge prevents component detection.
+  // Geometry is only used to propose candidate rectangles: card-face pixels
+  // must independently validate the proposal. No identity is inferred here.
+  function recoverHeroPair(img,boxes,prior){
+    var w=img.width,h=img.height,d=img.data,portrait=h/w>1.65&&h/w<2.7;
+    if(!portrait)return boxes;
+    var eligible=boxes.filter(function(b){
+      var cx=(b.x+b.width*.5)/w,cy=(b.y+b.height*.5)/h;
+      return cx>.15&&cx<.85&&cy>.67&&cy<.92&&
+       b.width>=w*.038&&b.width<=w*.24&&
+       b.height>=h*.06&&b.height<=h*.24;
+    }).sort(function(a,b){return a.x-b.x;});
+    function sameRow(a,b){
+      return Math.abs((a.y+a.height*.5)-(b.y+b.height*.5))<
+       Math.max(a.height,b.height)*.19&&
+       Math.abs(a.width-b.width)<Math.max(a.width,b.width)*.40&&
+       Math.abs(a.x-b.x)>Math.min(a.width,b.width)*.68&&
+       Math.abs(a.x-b.x)<Math.max(a.width,b.width)*1.56;
+    }
+    if(eligible.length===0)return boxes;
+    if(eligible.some(function(a,i){return eligible.some(function(b,j){
+      return i!==j&&sameRow(a,b);
+    });}))return boxes;
+    function patchScore(box){
+      var x0=Math.max(0,Math.floor(box.x+box.width*.17));
+      var x1=Math.min(w-1,Math.floor(box.x+box.width*.78));
+      var y0=Math.max(0,Math.floor(box.y+box.height*.13));
+      var y1=Math.min(h-1,Math.floor(box.y+box.height*.66));
+      if(x1<=x0||y1<=y0)return 0;
+      var white=0,total=0;
+      for(var y=y0;y<=y1;y+=3)for(var x=x0;x<=x1;x+=3){
+        var p=(y*w+x)*4,r=d[p],g=d[p+1],b=d[p+2];
+        total++;
+        if(Math.min(r,g,b)>=177&&Math.max(r,g,b)-Math.min(r,g,b)<76)white++;
+      }
+      return total?white/total:0;
+    }
+    function intersects(box){
+      return boxes.some(function(other){
+       var dx=Math.max(0,Math.min(box.x+box.width,other.x+other.width)-
+        Math.max(box.x,other.x));
+       var dy=Math.max(0,Math.min(box.y+box.height,other.y+other.height)-
+        Math.max(box.y,other.y));
+       return dx*dy>box.width*box.height*.22;
+      });
+    }
+    // Prefer an independently confirmed prior location for the missing
+    // slot, then consider immediate left/right neighbors of a detected card.
+    var suggestions=[],older=(prior&&prior.hero)||[];
+    for(var p=0;p<older.length;p++)if(older[p]&&older[p].box){
+      var hist=older[p].box;
+      if(eligible.some(function(b){
+       return Math.abs((hist.x+hist.width*.5)-(b.x+b.width*.5))<
+        Math.max(hist.width,b.width)*.32;
+      }))continue;
+      var nearest=eligible.some(function(b){return sameRow(b,hist);});
+      if(nearest)suggestions.push({
+       x:Math.round(hist.x),y:Math.round(hist.y),
+       width:Math.round(hist.width),height:Math.round(hist.height),
+       fromMemory:true
+      });
+    }
+    eligible.forEach(function(b){
+      [-1,1].forEach(function(sign){
+        [0.98,1.06,1.16].forEach(function(step){
+          suggestions.push({
+            x:Math.round(b.x+sign*b.width*step),
+            y:b.y,width:b.width,height:b.height
+          });
+        });
+      });
+    });
+    var winning=null;
+    suggestions.forEach(function(c){
+      if(c.x<0||c.y<0||c.x+c.width>w||c.y+c.height>h)return;
+      var cx=(c.x+c.width*.5)/w,cy=(c.y+c.height*.5)/h;
+      if(cx<.17||cx>.83||cy<.67||cy>.91||intersects(c))return;
+      if(!eligible.some(function(b){return sameRow(c,b);}))return;
+      var score=patchScore(c);
+      // Most of the clean top/inner card must actually be near white.
+      if(score<.74)return;
+      score+=c.fromMemory?.08:0;
+      var pairCenter=(eligible[0].x+eligible[0].width*.5+
+         c.x+c.width*.5)/(2*w);
+      score-=Math.abs(pairCenter-.5)*.16;
+      if(!winning||score>winning.score)winning={box:c,score:score};
+    });
+    if(!winning)return boxes;
+    var out=boxes.slice(),newCard=winning.box;
+    out.push({x:newCard.x,y:newCard.y,width:newCard.width,
+      height:newCard.height,guided:true,fill:winning.score});
+    out.sort(function(a,b){return a.x-b.x;});
+    return out;
+  }
+
   // Require repeated detection before declaring a count stable.
   // This deliberately does not declare individual ranks/suits.
   function createStabilizer(required) {
@@ -278,5 +375,5 @@
       reset: function(){previous=null;repeat=0;}
     };
   }
-  root.PokerCardDetector = {detect:detect,createStabilizer:createStabilizer};
+  root.PokerCardDetector = {detect:detect,recoverHeroPair:recoverHeroPair,createStabilizer:createStabilizer};
 }(typeof window !== 'undefined' ? window : self));
