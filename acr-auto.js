@@ -92,6 +92,7 @@
  var recognitionBlocked=false,recoveryPending=false;
  var temporal=window.ACRTemporal&&window.ACRTemporal.createTracker();
  var smartLock=window.ACRSmartLock&&window.ACRSmartLock.create();
+ var ai=window.ACRAI||null;
  var memoryLine=document.getElementById('dealMemoryLine');
  var memoryA=document.getElementById('memoryCardA'),memoryB=document.getElementById('memoryCardB');
  var memoryStatus=document.getElementById('memoryActionStatus');
@@ -151,6 +152,7 @@
  document.getElementById('manualNextHand').addEventListener('click',function(){
   if(temporal)temporal.reset();
   if(smartLock)smartLock.reset();
+  if(ai)ai.resetHand();
   var now=bridge.nextHand();clearAutoInputs();renderMemory(now);
   memoryStatus.textContent='Ново раздаване: старата памет е изчистена.';
   status.textContent='Паметта е нулирана за ново раздаване.';
@@ -171,6 +173,7 @@
   if(update.handChanged){
    if(temporal)temporal.reset();
    if(smartLock)smartLock.reset();
+  if(ai)ai.resetHand();
    clearAutoInputs();
    memoryStatus.textContent='Ново раздаване е потвърдено; паметта е нулирана.';
    recoveryPending=true;
@@ -206,6 +209,7 @@
  document.addEventListener('poker:camera-stopped',function(){
   if(temporal)temporal.reset();
   if(smartLock)smartLock.reset();
+  if(ai)ai.resetHand();
   lastSignature='';repeats=0;lastApplied='';
   clearAutoInputs();
  });
@@ -346,11 +350,13 @@
   }
   recoveryPending=false;
  }
- function inspect(img,confirmed,sourceInfo){
+ async function inspect(img,confirmed,sourceInfo){
   if(temporal)temporal.reset();
   if(smartLock)smartLock.reset();
+  if(ai)ai.resetHand();
   var start=Date.now();
   var result=vision.analyze(img);
+  if(ai)await ai.enrich(img,result);
   emitText(result,confirmed);
   diagnostics(result,sourceInfo);
   seatLine.textContent+=' · обработка '+(Date.now()-start)+' ms';
@@ -385,14 +391,14 @@
   return ctx.getImageData(0,0,contextCanvas.width,contextCanvas.height);
  }
  // Freeze the CURRENT already-authorized video frame, without reopening camera.
- captureButton.addEventListener('click',function(){
+ captureButton.addEventListener('click',async function(){
   if(video.readyState<2||!video.videoWidth||!video.videoHeight||video.paused){
    status.textContent='Първо включи камерата и изчакай картината.';
    return;
   }
   try{
    var frame=canvasImage(video,true);
-   var result=inspect(frame,true,{
+   var result=await inspect(frame,true,{
     originalWidth:video.videoWidth,originalHeight:video.videoHeight,
     ocrWidth:frame.width,ocrHeight:frame.height,canonical:false
    });
@@ -408,10 +414,10 @@
   if(!sourceInput.files||!sourceInput.files[0])return;
   var source=URL.createObjectURL(sourceInput.files[0]),img=new Image();
   status.textContent='Обработвам снимката…';
-  img.onload=function(){
+  img.onload=async function(){
    try{
     // Keep original resolution when possible for reading small glyphs.
-    var frame=canvasImage(img,true),result=inspect(frame,true,{
+    var frame=canvasImage(img,true),result=await inspect(frame,true,{
      originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,
      ocrWidth:frame.width,ocrHeight:frame.height,
      canonical:img.naturalWidth>=709&&img.naturalHeight/img.naturalWidth>=1.9&&img.naturalHeight/img.naturalWidth<=2.45
@@ -436,7 +442,7 @@
  file.addEventListener('change',function(){processImageInput(file);});
  nativeFile.addEventListener('change',function(){processImageInput(nativeFile);});
  var nextVisionDelay=350;
- function tick(){
+ async function tick(){
   captureButton.disabled=!(video.readyState>=2&&video.videoWidth&&!video.paused);
   if(frameWorking){setTimeout(tick,350);return;}
   if(video.readyState>=2&&video.videoWidth&&!video.paused){
@@ -445,9 +451,12 @@
     var startedAt=Date.now();
     var frame=canvasImage(video,true);
     var result=smartLock&&temporal?
-      smartLock.process(frame,vision,temporal,Date.now()):
+      await smartLock.process(frame,vision,temporal,Date.now(),ai&&ai.status().state==='ready'?ai.enrich:null):
       vision.analyze(frame);
-    if(!smartLock&&temporal)temporal.observe(result,Date.now());
+    if(!smartLock){
+      if(ai)await ai.enrich(frame,result);
+      if(temporal)temporal.observe(result,Date.now());
+    }
     var signature=result.stage+','+result.board.map(function(c){return c.code||'?';}).join('|')+','+
        result.hero.map(function(c){return c.code||(c.pendingCode?'~'+c.pendingCode:'?');}).join('|')+
        ','+result.coveredHands;
