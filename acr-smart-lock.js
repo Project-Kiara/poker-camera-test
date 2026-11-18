@@ -55,9 +55,9 @@
    frames=0;lastAudit=0;forced=0;baseline=Object.create(null);
    stats={scans:0,reused:0,mode:'pending',totalFrames:0};
   }
-  function process(img,vision,temporal,now,augment){
+  function process(img,vision,temporal,now,augment,options){
    if(!vision||!temporal||typeof temporal.lockedSlots!=='function')
-    throw new Error('Липсва OCR или памет за заключените карти.');
+    throw new Error('Липсва детекторът или паметта за заключените карти.');
    now=typeof now==='number'?now:Date.now();
    frames++;
    var locks=temporal.lockedSlots(now),fresh={},fingerprints={},suspect=false;
@@ -65,7 +65,7 @@
      now-lastAudit>=AUDIT_MS;
    if(scheduled){lastAudit=now;if(forced>0)forced--;}
    var scanned=0,reused=0;
-   var result=vision.analyze(img,{priorSlots:locks,reuseCard:function(kind,index,box,image){
+   var result=vision.analyze(img,{aiOnly:!!(options&&options.aiOnly),priorSlots:locks,reuseCard:function(kind,index,box,image){
     if(kind!=='board'&&kind!=='hero')return null;
     var key=kind+':'+index,lock=locks[kind][index],sig=signature(image,box);
     fingerprints[key]=sig;
@@ -84,7 +84,8 @@
     return {code:lock.code};
    }});
    function finalize(){
-   scanned=result.ocrReads||0;reused=result.reusedReads||0;
+   scanned=(options&&options.aiOnly)?(result.aiAttempted||0):(result.ocrReads||0);
+   reused=result.reusedReads||0;
    if(suspect){
     result.temporalConflict=true;
     result.temporalReason='visual-change';
