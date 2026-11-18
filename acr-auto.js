@@ -27,7 +27,7 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r28 · OCR r16 (размазани лични карти и защита на борда) · 17.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r29 · OCR r17 (Smart Recognition Lock) · 17.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
   '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r28">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r26">Проверка със снимани символи</a> · <a href="./ocr-hero-overlap-tests.html?v=r28">Тест: близки карти и аватар</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
@@ -91,6 +91,7 @@
  var ownCodes=[],boardCodes=[],previousHeroWasAuto=false;
  var recognitionBlocked=false,recoveryPending=false;
  var temporal=window.ACRTemporal&&window.ACRTemporal.createTracker();
+ var smartLock=window.ACRSmartLock&&window.ACRSmartLock.create();
  var memoryLine=document.getElementById('dealMemoryLine');
  var memoryA=document.getElementById('memoryCardA'),memoryB=document.getElementById('memoryCardB');
  var memoryStatus=document.getElementById('memoryActionStatus');
@@ -149,6 +150,7 @@
  document.getElementById('confirmMemoryShowdown').addEventListener('click',function(){confirmMemory('showdown');});
  document.getElementById('manualNextHand').addEventListener('click',function(){
   if(temporal)temporal.reset();
+  if(smartLock)smartLock.reset();
   var now=bridge.nextHand();clearAutoInputs();renderMemory(now);
   memoryStatus.textContent='Ново раздаване: старата памет е изчистена.';
   status.textContent='Паметта е нулирана за ново раздаване.';
@@ -168,6 +170,7 @@
   var update=bridge.observe(result);
   if(update.handChanged){
    if(temporal)temporal.reset();
+   if(smartLock)smartLock.reset();
    clearAutoInputs();
    memoryStatus.textContent='Ново раздаване е потвърдено; паметта е нулирана.';
    recoveryPending=true;
@@ -202,6 +205,7 @@
  renderMemory(bridge.snapshot());
  document.addEventListener('poker:camera-stopped',function(){
   if(temporal)temporal.reset();
+  if(smartLock)smartLock.reset();
   lastSignature='';repeats=0;lastApplied='';
   clearAutoInputs();
  });
@@ -344,6 +348,7 @@
  }
  function inspect(img,confirmed,sourceInfo){
   if(temporal)temporal.reset();
+  if(smartLock)smartLock.reset();
   var start=Date.now();
   var result=vision.analyze(img);
   emitText(result,confirmed);
@@ -439,8 +444,10 @@
    try{
     var startedAt=Date.now();
     var frame=canvasImage(video,true);
-    var result=vision.analyze(frame);
-    if(temporal)temporal.observe(result,Date.now());
+    var result=smartLock&&temporal?
+      smartLock.process(frame,vision,temporal,Date.now()):
+      vision.analyze(frame);
+    if(!smartLock&&temporal)temporal.observe(result,Date.now());
     var signature=result.stage+','+result.board.map(function(c){return c.code||'?';}).join('|')+','+
        result.hero.map(function(c){return c.code||(c.pendingCode?'~'+c.pendingCode:'?');}).join('|')+
        ','+result.coveredHands;
@@ -462,7 +469,9 @@
      result:result,confirmed:isStable,frameWidth:frame.width,frameHeight:frame.height
     }}));
     if(isStable)diagnostics(result);
-    seatLine.textContent+=' · обработка '+(Date.now()-startedAt)+' ms';
+    seatLine.textContent+=' · обработка '+(Date.now()-startedAt)+' ms'+
+      (result.smartLock?' · OCR '+result.smartLock.scanned+
+       ' · заключени '+result.smartLock.reused:'');
     if(isStable||result.forceNewHand){
      var accept=ingestMemory(result);
      if(accept&&lastApplied!==signature){applyResult(result);lastApplied=signature;}
