@@ -1,7 +1,7 @@
-/* Optional ONNX card-pip fallback for ACR, loaded once when the page opens.
+/* ONNX-only card-pip recognition for ACR, loaded once when the page opens.
  * LGD Cards Gen 3: https://huggingface.co/sroot/lgd-cards-gen3 (AGPL-3.0).
  * Detects corner pips, NOT whole cards. Geometry remains the local ACR detector's job.
- * Never overwrites a confirmed OCR card, a temporal lock, or an existing hand.
+ * Only this model assigns card codes. ACR geometry and temporal memory never classify glyphs.
  */
 (function(root){
  'use strict';
@@ -19,7 +19,7 @@
  var BASE_CLASSES=[];
  BASE_RANKS.forEach(function(r){BASE_SUITS.forEach(function(s){BASE_CLASSES.push(r+s);});});
  var labelSource='remote';
- var MIN_CONFIDENCE=.86, MAX_ATTEMPTS=1, RETRY_MS=1900;
+ var MIN_CONFIDENCE=.86, MAX_ATTEMPTS=2, RETRY_MS=950;
  var session=null, classes=null, state='idle', message='', loadPromise=null;
  var listeners=[], attempts=Object.create(null), sourceCanvas=null, sourceContext=null;
  var stage='not-started';
@@ -145,15 +145,15 @@
   if(n<1||n>50000||output.data.length!==n*features)return null;
   var arr=output.data,top=-1,second=-1,idx=-1;
   for(var p=0;p<n;p++){
-   var best=0,label=-1;
+   var best=0,runner=0,label=-1;
    for(var c=0;c<52;c++){
     var val=channelsFirst?arr[(c+4)*n+p]:arr[p*features+c+4];
-    if(val>best){best=val;label=c;}
+    if(val>best){runner=best;best=val;label=c;}
+    else if(val>runner)runner=val;
    }
    if(best>top){
-    if(idx!==label)second=Math.max(second,top);
-    top=best;idx=label;
-   }else if(label!==idx&&best>second)second=best;
+    second=runner;top=best;idx=label;
+   }
   }
   return idx>=0?{code:names[idx].slice(0,-1)+names[idx].slice(-1).toLowerCase(),
    confidence:top,margin:Math.max(0,top-second)}:null;
@@ -163,28 +163,32 @@
   var code=candidate.code;
   if(candidate.confidence<MIN_CONFIDENCE||candidate.margin<.18||already.has(code))return false;
   if(!/^(?:10|[2-9AJQK])[cdhs]$/.test(code))return false;
-  // A confident AI vote must not contradict independently visible OCR glyphs.
-  if(card.rank&&card.rank!==code.slice(0,-1))return false;
-  if(card.suit&&card.suit!==code.slice(-1))return false;
+  // Never overwrite a previously classified or locked card.
   card.code=code;card.rank=code.slice(0,-1);card.suit=code.slice(-1);
   card.rankScore=Math.round(candidate.confidence*100);
   card.suitScore=Math.round(candidate.confidence*100);
   card.rankSource='AI ONNX';card.suitSource='AI ONNX';
   card.ai=true;card.aiConfidence=Math.round(candidate.confidence*100);
-  card.reason='Резервен AI: предварително разпознаване; изчаква потвърждение от кадри';
+  card.reason='AI ONNX: разпозната карта; изчаква потвърждение от няколко кадъра';
   already.add(code);return true;
  }
  function summarize(result){
-  var cards=(result.board||[]).concat(result.hero||[]);
+  var cards=result.visible||[];
   var codes=cards.filter(function(c){return !!c.code;}).map(function(c){return c.code;});
   result.uniqueCards=new Set(codes).size===codes.length;
   result.boardComplete=result.board.length>=3&&
    result.board.every(function(c){return !!c.code;})&&result.uniqueCards;
  }
  async function enrich(img,result){
-  if(state!=='ready'||!session||!result||!img||!img.data)return result;
-  var unrecognized=(result.hero||[]).filter(function(c){return c.box&&!c.code&&!c.reused;})
-   .concat((result.board||[]).filter(function(c){return c.box&&!c.code&&!c.reused;}));
+  if(!result||!img||!img.data)return result;
+  result.recognitionMode='ai-only';
+  result.aiAttempted=0;result.aiAssisted=0;
+  if(state!=='ready'||!session)return result;
+  // Prioritize the user's two cards, then the board, then revealed opponents.
+  var needsAI=function(c){return c.box&&!c.code&&!c.reused&&!c.locked;};
+  var unrecognized=(result.hero||[]).filter(needsAI)
+   .concat((result.board||[]).filter(needsAI))
+   .concat((result.others||[]).filter(needsAI));
   if(!unrecognized.length)return result;
   var used=new Set(result.visible.filter(function(c){return !!c.code;}).map(function(c){return c.code;}));
   var now=Date.now(),updated=0,tried=0;
@@ -201,7 +205,7 @@
     var match=rankOutput(outputs[session.outputNames[0]],classes);
     if(maybeAttach(card,match,used))updated++;
    }catch(err){
-    // Bad crops or unsupported inference cannot interfere with the original OCR.
+    // Fail closed: never invent a card on inference errors.
     result.aiError=String(err&&err.message||err);
    }
   }
