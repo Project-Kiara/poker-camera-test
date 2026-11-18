@@ -472,19 +472,37 @@ function groupVisible(cards,w,h){
  return {board:board?board.cards:[],hero:hero?hero.cards:[],
    others:cards.filter(function(c){return selected.indexOf(c)<0;})};
 }
-function analyze(img){
+function analyze(img,options){
  var detect=root.PokerCardDetector,boxes=detect?detect.detect(img):[];
- // ACR portrait screenshots place action controls underneath the hole cards.
- // Card-shaped decorations in that UI zone are not poker cards.
+ // Detect geometry first. A slot may reuse an already-confirmed identity
+ // without repeating the costly glyph/template comparisons.
  var portrait=img.height/img.width>1.65&&img.height/img.width<2.7;
- var ignoredUi=0;
+ var ignoredUi=0,ocrReads=0,reusedReads=0;
  var candidates=boxes.filter(function(box){
   var isActionUi=portrait&&box.y/img.height>.90;
   if(isActionUi)ignoredUi++;
   return !isActionUi;
  });
- var face=candidates.map(function(box){return classify(img,box);});
+ var face=candidates.map(function(box){return {box:box,code:null};});
  var groups=groupVisible(face,img.width,img.height),backs=detectBurgundyPairs(img);
+ function read(group,kind){
+  group.forEach(function(card,index){
+   var cached=options&&typeof options.reuseCard==='function'?
+     options.reuseCard(kind,index,card.box,img):null;
+   if(cached&&typeof cached.code==='string'&&
+      /^(?:10|[2-9JQKA])[cdhs]$/.test(cached.code)){
+    card.code=cached.code;card.rank=cached.code.slice(0,-1);
+    card.suit=cached.code.slice(-1);card.reused=true;card.temporal=true;
+    card.reason='Заключена карта; проверена позиция, OCR пропуснат';
+    reusedReads++;
+   }else{
+    var fresh=classify(img,card.box);
+    Object.keys(fresh).forEach(function(key){card[key]=fresh[key];});
+    ocrReads++;
+   }
+  });
+ }
+ read(groups.board,'board');read(groups.hero,'hero');read(groups.others,'others');
  var board=groups.board,hero=groups.hero;
  var combined=board.concat(hero).filter(function(c){return !!c.code;}).map(function(c){return c.code;});
  var noDuplicates=(new Set(combined)).size===combined.length;
@@ -505,6 +523,7 @@ function analyze(img){
   return x>.25&&x<.75&&y>.20&&y<.72;
  });
  return {visible:face,board:board,hero:hero,others:groups.others,
+  ocrReads:ocrReads,reusedReads:reusedReads,
   ignoredUiBoxes:ignoredUi,
   faceCount:face.length,coveredHands:otherBacks.length,backPairs:otherBacks,
   activePlayers:otherBacks.length+(hero.length===2?1:0),
