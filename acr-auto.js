@@ -7,8 +7,8 @@
  var section=document.createElement('section');
  section.className='panel';section.id='autoRecognition';
  section.innerHTML=[
-  '<h2>Автоматично разпознаване · ACR Poker</h2>',
-  '<p class="hint">Поддържа 10 и T за десетка. След снимка вероятностите се обновяват автоматично само при потвърдени карти.</p>',
+  '<h2>Само AI разпознаване · ACR Poker</h2>',
+  '<p class="hint">Само AI определя стойността и боята. При недостъпен AI няма резервно OCR.</p>',
   '<div class="reading-summary">',
   '<p id="visionStage">Етап: —</p>',
   '<p id="visionCards" style="color:#e1f8ee">Общи карти: —</p>',
@@ -27,7 +27,7 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r34 · OCR r19 + ONNX AI (резервен метод) · 18.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r36 · ONNX AI единствен метод за разпознаване · 18.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
   '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r32">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r26">Проверка със снимани символи</a> · <a href="./ocr-hero-overlap-tests.html?v=r32">Тест: близки карти и аватар</a> · <a href="./ocr-smart-lock-tests.html?v=r32">Тест: Smart Recognition Lock</a> · <a href="./ocr-ai-fallback-tests.html?v=r34">Тест: резервен ONNX AI</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
@@ -93,6 +93,7 @@
  var temporal=window.ACRTemporal&&window.ACRTemporal.createTracker();
  var smartLock=window.ACRSmartLock&&window.ACRSmartLock.create();
  var ai=window.ACRAI||null;
+ function aiReady(){return !!(ai&&ai.status().state==='ready');}
  var memoryLine=document.getElementById('dealMemoryLine');
  var memoryA=document.getElementById('memoryCardA'),memoryB=document.getElementById('memoryCardB');
  var memoryStatus=document.getElementById('memoryActionStatus');
@@ -226,7 +227,7 @@
     'Игнорирани обекти от областта на бутоните: '+(result.ignoredUiBoxes||0),
     'Потвърдени стойност+боя: '+cards.filter(function(c){return !!c.code;}).length,
     'Непотвърдени: '+cards.filter(function(c){return !c.code;}).length,
-    'Резервен AI: '+(ai?ai.status().state:'липсва')+
+    'AI разпознаване: '+(ai?ai.status().state:'липсва')+
       ' · опити: '+(result.aiAttempted||0)+
       ' · допълнени карти: '+(result.aiAssisted||0)+
       (result.aiError?' · проблем: '+result.aiError:'')];
@@ -359,12 +360,13 @@
   if(smartLock)smartLock.reset();
   if(ai)ai.resetHand();
   var start=Date.now();
-  var result=vision.analyze(img);
-  if(ai)await ai.enrich(img,result);
+  var result=vision.analyze(img,{aiOnly:true});
+  if(aiReady())await ai.enrich(img,result);
+  else suspendAnalysis('AI не е готов. Изчаквам AI модела; старото OCR е изключено.');
   emitText(result,confirmed);
   diagnostics(result,sourceInfo);
   seatLine.textContent+=' · обработка '+(Date.now()-start)+' ms';
-  if(confirmed&&ingestMemory(result)){
+  if(confirmed&&aiReady()&&ingestMemory(result)){
    applyResult(result);
    // A still photograph is an independent analysis request: recalculate even
    // when the cards match the previous video frame.
@@ -432,10 +434,10 @@
       (img.naturalWidth*img.naturalHeight/1000000).toFixed(1)+' MP)';
     if(!bridge.snapshot().resetPending&&result.faceCount&&result.visible.every(function(c){return !!c.code;}))
       status.textContent='Оригинална снимка: '+sourceDimensions+'. '+result.faceCount+
-        ' разчетени карти. OCR обработва оптимизирано копие.';
+        ' карти, разпознати чрез AI.';
     else
       status.textContent='Оригинална снимка: '+sourceDimensions+'. '+result.faceCount+
-        ' открити карти; има неясни или непотвърдени символи. OCR обработва оптимизирано копие.';
+        ' открити карти; има неясни или непотвърдени AI резултати.';
    }catch(err){status.textContent='Неуспешно разчитане: '+err.message;}
    URL.revokeObjectURL(source);
    sourceInput.value=''; // Enable retesting the same image without a full page reload.
@@ -455,10 +457,10 @@
     var startedAt=Date.now();
     var frame=canvasImage(video,true);
     var result=smartLock&&temporal?
-      await smartLock.process(frame,vision,temporal,Date.now(),ai&&ai.status().state==='ready'?ai.enrich:null):
-      vision.analyze(frame);
+      await smartLock.process(frame,vision,temporal,Date.now(),aiReady()?ai.enrich:null,{aiOnly:true}):
+      vision.analyze(frame,{aiOnly:true});
     if(!smartLock){
-      if(ai)await ai.enrich(frame,result);
+      if(aiReady())await ai.enrich(frame,result);
       if(temporal)temporal.observe(result,Date.now());
     }
     var signature=result.stage+','+result.board.map(function(c){return c.code||'?';}).join('|')+','+
@@ -482,20 +484,21 @@
      result:result,confirmed:isStable,frameWidth:frame.width,frameHeight:frame.height
     }}));
     if(isStable)diagnostics(result);
+    if(!aiReady())suspendAnalysis('AI моделът не е готов; разпознаването и изчисленията са спрени.');
     seatLine.textContent+=' · обработка '+(Date.now()-startedAt)+' ms'+
-      (result.smartLock?' · OCR '+result.smartLock.scanned+
+      (result.smartLock?' · AI проверки '+result.smartLock.scanned+
        ' · заключени '+result.smartLock.locked+
-       ' · без повторно OCR '+result.smartLock.reused:'');
-    if(isStable||result.forceNewHand){
+       ' · запомнени без повторно AI '+result.smartLock.reused:'');
+    if(aiReady()&&(isStable||result.forceNewHand)){
      var accept=ingestMemory(result);
      if(accept&&lastApplied!==signature){applyResult(result);lastApplied=signature;}
     }
    }catch(err){status.textContent='Грешка при разпознаване: '+err.message;}
-   // Keep OCR responsive when frames are inexpensive, but leave breathing
+   // Keep AI responsive when frames are inexpensive, but leave breathing
    // room for the camera on older iPhones when recognition is expensive.
    var elapsed=Date.now()-startedAt;
-   // Locked frames need no template matching; refresh their lightweight
-   // position check sooner. Heavy OCR keeps the existing phone-safe pacing.
+   // Locked frames need no repeated AI; refresh their lightweight
+   // position check sooner. Heavy AI keeps the existing phone-safe pacing.
    var cachedFrame=!!(result&&result.smartLock&&result.smartLock.reused>0);
    var minDelay=cachedFrame?240:350;
    nextVisionDelay=Math.max(minDelay,
