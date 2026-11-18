@@ -65,7 +65,7 @@
      now-lastAudit>=AUDIT_MS;
    if(scheduled){lastAudit=now;if(forced>0)forced--;}
    var scanned=0,reused=0;
-   var result=vision.analyze(img,{reuseCard:function(kind,index,box,image){
+   var result=vision.analyze(img,{priorSlots:locks,reuseCard:function(kind,index,box,image){
     if(kind!=='board'&&kind!=='hero')return null;
     var key=kind+':'+index,lock=locks[kind][index],sig=signature(image,box);
     fingerprints[key]=sig;
@@ -118,11 +118,15 @@
     // the previous hand's fingerprints.
     if(result.forceNewHand)baseline=Object.create(null);
    }
-   stats={scans:scanned,reused:reused,
+   var confirmed=temporal.lockedSlots(now),locked=0;
+   ['hero','board'].forEach(function(kind){
+     confirmed[kind].forEach(function(v){if(v&&v.code)locked++;});
+   });
+   stats={scans:scanned,reused:reused,locked:locked,
     mode:reused>0?'lock':scheduled?'audit':'discovery',
     totalFrames:frames};
-   result.smartLock={scanned:scanned,reused:reused,mode:stats.mode,
-    periodicAudit:scheduled,visualChange:suspect};
+   result.smartLock={scanned:scanned,reused:reused,locked:locked,
+    mode:stats.mode,periodicAudit:scheduled,visualChange:suspect};
    return result;
   }
   return {process:process,reset:reset,status:function(){return stats;}};
