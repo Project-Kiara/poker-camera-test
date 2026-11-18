@@ -55,7 +55,7 @@
    frames=0;lastAudit=0;forced=0;baseline=Object.create(null);
    stats={scans:0,reused:0,mode:'pending',totalFrames:0};
   }
-  function process(img,vision,temporal,now){
+  function process(img,vision,temporal,now,augment){
    if(!vision||!temporal||typeof temporal.lockedSlots!=='function')
     throw new Error('Липсва OCR или памет за заключените карти.');
    now=typeof now==='number'?now:Date.now();
@@ -83,6 +83,7 @@
     }
     return {code:lock.code};
    }});
+   function finalize(){
    scanned=result.ocrReads||0;reused=result.reusedReads||0;
    if(suspect){
     result.temporalConflict=true;
@@ -128,6 +129,14 @@
    result.smartLock={scanned:scanned,reused:reused,locked:locked,
     mode:stats.mode,periodicAudit:scheduled,visualChange:suspect};
    return result;
+   }
+   if(typeof augment==='function'){
+    try{
+     return Promise.resolve(augment(img,result)).then(function(){return finalize();},
+       function(){return finalize();});
+    }catch(_){}
+   }
+   return finalize();
   }
   return {process:process,reset:reset,status:function(){return stats;}};
  }
