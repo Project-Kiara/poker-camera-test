@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Тест на AI резервното разпознаване</title>
+<style>
+body{max-width:740px;margin:20px auto;padding:0 14px;background:#101927;color:#f3f7ff;font:15px/1.5 system-ui}
+p{color:#b6c8dc}li{padding:5px 0;border-bottom:1px solid #30465b}
+button{background:#62e4b5;color:#0d2720;border:0;border-radius:9px;padding:12px;font-weight:bold}
+.good{color:#8ff3b6}.bad{color:#ffa0a0}a{color:#a5d9fa}
+</style></head><body>
+<h1>Резервно AI разпознаване</h1>
+<p>Тества обработката на 52 класа, ONNX резултатите, частично разпознати и вече заключени карти.
+Използва симулиран модел, без да изтегля реалните тегла. Реалната точност и скорост се проверяват с камерата на iPhone.</p>
+<button type="button" id="run">Провери модула</button>
+<p id="status" role="status">Очаква стартиране.</p><ol id="out"></ol>
+<p><a href="./">Към покер камерата</a> · <a href="https://huggingface.co/sroot/lgd-cards-gen3">Източник на модела (AGPL-3.0)</a></p>
+<script src="./acr-ai.js?v=ai-warm-r34"></script>
+<script>
+(function(){
+ 'use strict';
+ var names=['10','2','3','4','5','6','7','8','9','A','J','K','Q'].flatMap(function(rank){
+  return ['C','D','H','S'].map(function(suit){return rank+suit;});
+ });
+ function result(card){
+  return {hero:[card],board:[],visible:[card],others:[],stage:'Префлоп',
+   uniqueCards:true,boardComplete:false};
+ }
+ function mockOutput(){
+  var scores=new Float32Array(56);scores[4]=0.98;
+  return {dims:[1,56,1],data:scores};
+ }
+ async function run(){
+  var tests=[],ai=window.ACRAI;
+  function check(text,pass){tests.push({text:text,pass:!!pass});}
+  check('Разчитат се всички 52 класа',ai.namesFromJson(names).length===52);
+  check('Приема се обект с индекси',ai.namesFromJson(Object.fromEntries(names.map(function(n,i){return [i,n];}))).length===52);
+  check('Приема се метаобект със списък',ai.namesFromJson({names:names}).length===52);
+  try{ai.namesFromJson(['неправилен клас']);check('Отхвърля грешен списък',false);}
+  catch(_){check('Отхвърля грешен списък',true);}
+  check('Разчита ONNX output с класове по редове',ai.rankOutput(mockOutput(),names).code==='10c');
+  var transposed=new Float32Array(56);transposed[4]=0.98;
+  check('Разчита ONNX output с класове по колони',
+   ai.rankOutput({dims:[1,1,56],data:transposed},names).code==='10c');
+  check('Отхвърля непозната форма на модела',
+   ai.rankOutput({dims:[1,40,1],data:new Float32Array(40)},names)===null);
+  var oldFetch=window.fetch,oldOrt=window.ort;
+  var feedCount=0;
+  try{
+   window.ort={
+    env:{wasm:{}},
+    Tensor:function(t,d,shape){feedCount++;this.data=d;this.dims=shape;},
+    InferenceSession:{create:async function(){return {inputNames:['images'],outputNames:['out'],
+     run:async function(){return {out:mockOutput()};}};}}
+   };
+   window.fetch=async function(){return {ok:true,json:async function(){return names;}};};
+   check('AI се подготвя автоматично при start()',await ai.start()===true&&ai.status().state==='ready');
+   var image={width:90,height:110,data:new Uint8ClampedArray(90*110*4)};
+   var box={x:12,y:13,width:36,height:56};
+   var pending={box:box,pendingCode:'10c',code:null},a=result(pending);
+   await ai.enrich(image,a);
+   check('AI помага при частично разпозната карта',pending.code==='10c'&&a.aiAssisted===1&&feedCount===1);
+   var conflicting={box:box,rank:'A',code:null};
+   ai.resetHand();await ai.enrich(image,result(conflicting));
+   check('Не заменя противоречащ разчетен символ',!conflicting.code);
+   var recognized={box:box,code:'As'};
+   ai.resetHand();await ai.enrich(image,result(recognized));
+   check('Не променя потвърдена карта',recognized.code==='As');
+   var duplicate={box:box,code:null};
+   var d=result(duplicate);d.visible.push({code:'10c'});
+   ai.resetHand();await ai.enrich(image,d);
+   check('Не добавя дубликат на видима карта',duplicate.code===null);
+   var locked={box:box,locked:true,code:null};
+   ai.resetHand();await ai.enrich(image,result(locked));
+   check('Не променя заключена карта',!locked.code);
+   var p={box:box,code:null};ai.resetHand();await ai.enrich(image,result(p));
+   check('Паметта за опитите се нулира при ново раздаване',p.code==='10c');
+  }finally{window.fetch=oldFetch;window.ort=oldOrt;}
+  return tests;
+ }
+ document.getElementById('run').addEventListener('click',async function(){
+  var status=document.getElementById('status'),out=document.getElementById('out');
+  status.textContent='Тествам…';out.textContent='';
+  try{
+   var tests=await run();
+   tests.forEach(function(t){var li=document.createElement('li');li.className=t.pass?'good':'bad';
+    li.textContent=(t.pass?'✓ ':'✗ ')+t.text;out.appendChild(li);});
+   var ok=tests.filter(function(t){return t.pass;}).length;
+   status.textContent='Преминали '+ok+' от '+tests.length+' проверки.';
+  }catch(e){status.textContent='Грешка: '+String(e&&e.message||e);}
+ });
+})();
+</script></body></html>
