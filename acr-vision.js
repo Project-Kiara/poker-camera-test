@@ -474,6 +474,9 @@ function groupVisible(cards,w,h){
 }
 function analyze(img,options){
  var detect=root.PokerCardDetector,boxes=detect?detect.detect(img):[];
+ var initialBoxes=boxes.length;
+ if(detect&&detect.recoverHeroPair)
+  boxes=detect.recoverHeroPair(img,boxes,options&&options.priorSlots);
  // Detect geometry first. A slot may reuse an already-confirmed identity
  // without repeating the costly glyph/template comparisons.
  var portrait=img.height/img.width>1.65&&img.height/img.width<2.7;
@@ -523,7 +526,7 @@ function analyze(img,options){
   return x>.25&&x<.75&&y>.20&&y<.72;
  });
  return {visible:face,board:board,hero:hero,others:groups.others,
-  ocrReads:ocrReads,reusedReads:reusedReads,
+  ocrReads:ocrReads,reusedReads:reusedReads,guidedBoxes:boxes.length-initialBoxes,
   ignoredUiBoxes:ignoredUi,
   faceCount:face.length,coveredHands:otherBacks.length,backPairs:otherBacks,
   activePlayers:otherBacks.length+(hero.length===2?1:0),
