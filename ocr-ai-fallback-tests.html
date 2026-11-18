@@ -1,19 +1,19 @@
 <!doctype html>
 <html lang="bg"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Тест на AI резервното разпознаване</title>
+<title>Тест на самостоятелното AI разпознаване</title>
 <style>
 body{max-width:740px;margin:20px auto;padding:0 14px;background:#101927;color:#f3f7ff;font:15px/1.5 system-ui}
 p{color:#b6c8dc}li{padding:5px 0;border-bottom:1px solid #30465b}
 button{background:#62e4b5;color:#0d2720;border:0;border-radius:9px;padding:12px;font-weight:bold}
 .good{color:#8ff3b6}.bad{color:#ffa0a0}a{color:#a5d9fa}
 </style></head><body>
-<h1>Резервно AI разпознаване</h1>
-<p>Тества обработката на 52 класа, ONNX резултатите, частично разпознати и вече заключени карти.
+<h1>Само AI разпознава картите</h1>
+<p>Тества единствения AI класификатор, 52-те карти, ONNX резултатите и вече заключените карти.
 Използва симулиран модел, без да изтегля реалните тегла. Реалната точност и скорост се проверяват с камерата на iPhone.</p>
 <button type="button" id="run">Провери модула</button>
 <p id="status" role="status">Очаква стартиране.</p><ol id="out"></ol>
 <p><a href="./">Към покер камерата</a> · <a href="https://huggingface.co/sroot/lgd-cards-gen3">Източник на модела (AGPL-3.0)</a></p>
-<script src="./acr-ai.js?v=ai-warm-r34"></script>
+<script src="./acr-ai.js?v=ai-only-r36"></script>
 <script>
 (function(){
  'use strict';
@@ -60,7 +60,7 @@ button{background:#62e4b5;color:#0d2720;border:0;border-radius:9px;padding:12px;
    check('AI помага при частично разпозната карта',pending.code==='10c'&&a.aiAssisted===1&&feedCount===1);
    var conflicting={box:box,rank:'A',code:null};
    ai.resetHand();await ai.enrich(image,result(conflicting));
-   check('Не заменя противоречащ разчетен символ',!conflicting.code);
+   check('AI определя картата независимо от стари неподтвърдени OCR предположения',conflicting.code==='10c');
    var recognized={box:box,code:'As'};
    ai.resetHand();await ai.enrich(image,result(recognized));
    check('Не променя потвърдена карта',recognized.code==='As');
@@ -71,6 +71,9 @@ button{background:#62e4b5;color:#0d2720;border:0;border-radius:9px;padding:12px;
    var locked={box:box,locked:true,code:null};
    ai.resetHand();await ai.enrich(image,result(locked));
    check('Не променя заключена карта',!locked.code);
+   var enemy={box:box,code:null},revealed={hero:[],board:[],others:[enemy],visible:[enemy]};
+   ai.resetHand();await ai.enrich(image,revealed);
+   check('AI разпознава и открити чужди карти',enemy.code==='10c');
    var p={box:box,code:null};ai.resetHand();await ai.enrich(image,result(p));
    check('Паметта за опитите се нулира при ново раздаване',p.code==='10c');
   }finally{window.fetch=oldFetch;window.ort=oldOrt;}
