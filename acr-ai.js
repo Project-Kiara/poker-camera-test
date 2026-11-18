@@ -23,7 +23,7 @@
  var LIVE_COOLDOWN_MS=IS_IOS?2400:850,HARD_INFERENCE_MS=IS_IOS?9000:16000;
  var session=null, classes=null, state='idle', message='', loadPromise=null;
  var listeners=[], attempts=Object.create(null), sourceCanvas=null, sourceContext=null;
- var inFlight=false,lastInferenceAt=0,lastInferenceMs=0,failures=0,cursor=0,rgbBuffer=null;
+ var inFlight=false,lastInferenceAt=0,lastInferenceMs=0,failures=0,misses=0,cursor=0,rgbBuffer=null;
  var stage='not-started';
  var inputCanvas=null, inputContext=null;
  function notify(next,detail){
@@ -102,7 +102,7 @@
    session=model;
    if(!session.inputNames||session.inputNames.length!==1||!session.outputNames||!session.outputNames.length)
     throw new Error('Unexpected ONNX inputs or outputs');
-   stage='готов';notify('ready','52 класа; етикети: '+labelSource);
+   failures=0;stage='готов';notify('ready','52 класа; етикети: '+labelSource);
    return true;
   }).catch(function(err){
    session=null;
@@ -202,7 +202,9 @@
   if(state!=='ready'||!session)return result;
   if(inFlight){result.aiBusy=true;return result;}
   var live=!!(options&&options.live),now=Date.now();
-  if(live&&now-lastInferenceAt<LIVE_COOLDOWN_MS){
+  // Unrecognized cards trigger backoff instead of an endless high-CPU loop.
+  var cooldown=LIVE_COOLDOWN_MS*(misses>=6?3:misses>=3?2:1);
+  if(live&&now-lastInferenceAt<cooldown){
    result.aiCooldown=true;return result;
   }
   var needsAI=function(c){return c.box&&!c.code&&!c.reused&&!c.locked;};
@@ -253,13 +255,14 @@
    }
   }finally{inFlight=false;}
   if(updated){summarize(result);result.aiAssisted=updated;}
+  if(live&&tried)misses=updated?0:Math.min(9,misses+1);
   result.aiAttempted=tried;
   return result;
  }
- function resetHand(){attempts=Object.create(null);cursor=0;}
+ function resetHand(){attempts=Object.create(null);cursor=0;misses=0;}
  root.ACRAI={
   start:start,subscribe:subscribe,enrich:enrich,resetHand:resetHand,
-  status:function(){return {state:state,message:message,stage:stage,labelSource:labelSource,runtime:ORT_VERSION,lastInferenceMs:lastInferenceMs,busy:inFlight};},
+  status:function(){return {state:state,message:message,stage:stage,labelSource:labelSource,runtime:ORT_VERSION,lastInferenceMs:lastInferenceMs,busy:inFlight,misses:misses};},
   rankOutput:rankOutput,namesFromJson:namesFromJson
  };
 }(typeof window!=='undefined'?window:globalThis));
