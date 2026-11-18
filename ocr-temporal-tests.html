@@ -11,7 +11,7 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
 <button id="run" type="button">Пусни проверките</button>
 <p id="summary" role="status">Готов за тест.</p><ol id="list"></ol>
 <p><a href="./">Към камерата</a> · <a href="./ocr-library-tests.html?v=r19">Тест на 52 карти</a></p>
-<script src="./acr-temporal.js?v=hero-ocr-r27"></script>
+<script src="./acr-temporal.js?v=right-hero-r32"></script>
 <script>
 (function(){
  'use strict';
@@ -188,6 +188,45 @@ p{color:#b7cadb}li{padding:6px;border-bottom:1px solid #34425a}.ok{color:#7bf1b7
   f=changing.observe(newFlop(),3700);
   check('Старите лични карти не се наследяват в новия борд',
     !f.temporalConflict&&f.hero[1].code===null);
+  // A new hand may keep one value: e.g. 4♠ 10♠ -> 4♠ 9♥.
+  // Require four independent readings instead of locking up forever.
+  var oneChanged=mod.createTracker();
+  function oldPair(){return frame([card('4','s','4s',100),
+    card('10','s','10s',220)],[],'Префлоп');}
+  function partlyChanged(){return frame([card('4','s','4s',100),
+    card('9','h','9h',220)],[],'Префлоп');}
+  oneChanged.observe(oldPair(),100);oneChanged.observe(oldPair(),500);
+  var onlyOne=false,accepted=false;
+  for(var n=0;n<4;n++){
+   f=oneChanged.observe(partlyChanged(),900+n*450);
+   if(n===0)onlyOne=!!f.temporalConflict&&!f.forceNewHand;
+   if(n===3)accepted=!!f.forceNewHand&&f.hero[1].code==='9h';
+  }
+  check('Една променена лична карта изчаква допълнителни кадри',onlyOne);
+  check('Една променена карта отключва старото раздаване след 4 потвърждения',accepted);
+
+  var cachedNew=mod.createTracker();
+  cachedNew.observe(oldPair(),100);cachedNew.observe(oldPair(),500);
+  var cleared=false;
+  for(var j=0;j<5;j++){
+   var oldCached=card('10','s','10s',220);oldCached.reused=true;
+   f=cachedNew.observe(frame([card('4','d','4d',100),oldCached],
+     [],'Префлоп'),1000+j*450);
+  }
+  cleared=!!f.forceNewHand&&f.hero[0].code==='4d'&&f.hero[1].code===null;
+  check('При ново раздаване кеширана стара карта не се приема за нова',cleared);
+
+  var noisy=mod.createTracker();
+  function mixed(rank,suit){
+   var c=card(rank,suit,null,220);
+   return frame([c],[],'Префлоп');
+  }
+  noisy.observe(mixed('9','h'),100);
+  noisy.observe(mixed('8',null),500);
+  noisy.observe(mixed('9','h'),900);
+  f=noisy.observe(mixed('9','h'),1300);
+  check('Една погрешна стойност не блокира постоянно правилната 9♥',
+    f.hero[0].code==='9h'&&f.hero[0].locked===true);
   return checks;
  }
  document.getElementById('run').addEventListener('click',function(){
