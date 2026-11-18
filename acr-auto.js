@@ -27,9 +27,9 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r32 · OCR r19 (отделно разпознаване на дясната карта) · 17.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r34 · OCR r19 + ONNX AI (резервен метод) · 18.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
-  '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r32">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r26">Проверка със снимани символи</a> · <a href="./ocr-hero-overlap-tests.html?v=r32">Тест: близки карти и аватар</a> · <a href="./ocr-smart-lock-tests.html?v=r32">Тест: Smart Recognition Lock</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
+  '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r32">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r26">Проверка със снимани символи</a> · <a href="./ocr-hero-overlap-tests.html?v=r32">Тест: близки карти и аватар</a> · <a href="./ocr-smart-lock-tests.html?v=r32">Тест: Smart Recognition Lock</a> · <a href="./ocr-ai-fallback-tests.html?v=r34">Тест: резервен ONNX AI</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
   '<label><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>',
   '<label><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label>',
@@ -92,6 +92,7 @@
  var recognitionBlocked=false,recoveryPending=false;
  var temporal=window.ACRTemporal&&window.ACRTemporal.createTracker();
  var smartLock=window.ACRSmartLock&&window.ACRSmartLock.create();
+ var ai=window.ACRAI||null;
  var memoryLine=document.getElementById('dealMemoryLine');
  var memoryA=document.getElementById('memoryCardA'),memoryB=document.getElementById('memoryCardB');
  var memoryStatus=document.getElementById('memoryActionStatus');
@@ -151,6 +152,7 @@
  document.getElementById('manualNextHand').addEventListener('click',function(){
   if(temporal)temporal.reset();
   if(smartLock)smartLock.reset();
+  if(ai)ai.resetHand();
   var now=bridge.nextHand();clearAutoInputs();renderMemory(now);
   memoryStatus.textContent='Ново раздаване: старата памет е изчистена.';
   status.textContent='Паметта е нулирана за ново раздаване.';
@@ -171,6 +173,7 @@
   if(update.handChanged){
    if(temporal)temporal.reset();
    if(smartLock)smartLock.reset();
+   if(ai)ai.resetHand();
    clearAutoInputs();
    memoryStatus.textContent='Ново раздаване е потвърдено; паметта е нулирана.';
    recoveryPending=true;
@@ -206,6 +209,7 @@
  document.addEventListener('poker:camera-stopped',function(){
   if(temporal)temporal.reset();
   if(smartLock)smartLock.reset();
+  if(ai)ai.resetHand();
   lastSignature='';repeats=0;lastApplied='';
   clearAutoInputs();
  });
@@ -221,7 +225,11 @@
     'Открити правоъгълници: '+cards.length,
     'Игнорирани обекти от областта на бутоните: '+(result.ignoredUiBoxes||0),
     'Потвърдени стойност+боя: '+cards.filter(function(c){return !!c.code;}).length,
-    'Непотвърдени: '+cards.filter(function(c){return !c.code;}).length];
+    'Непотвърдени: '+cards.filter(function(c){return !c.code;}).length,
+    'Резервен AI: '+(ai?ai.status().state:'липсва')+
+      ' · опити: '+(result.aiAttempted||0)+
+      ' · допълнени карти: '+(result.aiAssisted||0)+
+      (result.aiError?' · проблем: '+result.aiError:'')];
   cards.forEach(function(c,i){
    var x=c.box.x,y=c.box.y;
    var scoreRank=typeof c.rankScore==='number'?c.rankScore+'%':'няма';
@@ -346,11 +354,13 @@
   }
   recoveryPending=false;
  }
- function inspect(img,confirmed,sourceInfo){
+ async function inspect(img,confirmed,sourceInfo){
   if(temporal)temporal.reset();
   if(smartLock)smartLock.reset();
+  if(ai)ai.resetHand();
   var start=Date.now();
   var result=vision.analyze(img);
+  if(ai)await ai.enrich(img,result);
   emitText(result,confirmed);
   diagnostics(result,sourceInfo);
   seatLine.textContent+=' · обработка '+(Date.now()-start)+' ms';
@@ -385,14 +395,14 @@
   return ctx.getImageData(0,0,contextCanvas.width,contextCanvas.height);
  }
  // Freeze the CURRENT already-authorized video frame, without reopening camera.
- captureButton.addEventListener('click',function(){
+ captureButton.addEventListener('click',async function(){
   if(video.readyState<2||!video.videoWidth||!video.videoHeight||video.paused){
    status.textContent='Първо включи камерата и изчакай картината.';
    return;
   }
   try{
    var frame=canvasImage(video,true);
-   var result=inspect(frame,true,{
+   var result=await inspect(frame,true,{
     originalWidth:video.videoWidth,originalHeight:video.videoHeight,
     ocrWidth:frame.width,ocrHeight:frame.height,canonical:false
    });
@@ -408,10 +418,10 @@
   if(!sourceInput.files||!sourceInput.files[0])return;
   var source=URL.createObjectURL(sourceInput.files[0]),img=new Image();
   status.textContent='Обработвам снимката…';
-  img.onload=function(){
+  img.onload=async function(){
    try{
     // Keep original resolution when possible for reading small glyphs.
-    var frame=canvasImage(img,true),result=inspect(frame,true,{
+    var frame=canvasImage(img,true),result=await inspect(frame,true,{
      originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,
      ocrWidth:frame.width,ocrHeight:frame.height,
      canonical:img.naturalWidth>=709&&img.naturalHeight/img.naturalWidth>=1.9&&img.naturalHeight/img.naturalWidth<=2.45
@@ -436,7 +446,7 @@
  file.addEventListener('change',function(){processImageInput(file);});
  nativeFile.addEventListener('change',function(){processImageInput(nativeFile);});
  var nextVisionDelay=350;
- function tick(){
+ async function tick(){
   captureButton.disabled=!(video.readyState>=2&&video.videoWidth&&!video.paused);
   if(frameWorking){setTimeout(tick,350);return;}
   if(video.readyState>=2&&video.videoWidth&&!video.paused){
@@ -445,9 +455,12 @@
     var startedAt=Date.now();
     var frame=canvasImage(video,true);
     var result=smartLock&&temporal?
-      smartLock.process(frame,vision,temporal,Date.now()):
+      await smartLock.process(frame,vision,temporal,Date.now(),ai&&ai.status().state==='ready'?ai.enrich:null):
       vision.analyze(frame);
-    if(!smartLock&&temporal)temporal.observe(result,Date.now());
+    if(!smartLock){
+      if(ai)await ai.enrich(frame,result);
+      if(temporal)temporal.observe(result,Date.now());
+    }
     var signature=result.stage+','+result.board.map(function(c){return c.code||'?';}).join('|')+','+
        result.hero.map(function(c){return c.code||(c.pendingCode?'~'+c.pendingCode:'?');}).join('|')+
        ','+result.coveredHands;
