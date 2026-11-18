@@ -480,7 +480,12 @@
    // Keep OCR responsive when frames are inexpensive, but leave breathing
    // room for the camera on older iPhones when recognition is expensive.
    var elapsed=Date.now()-startedAt;
-   nextVisionDelay=Math.max(350,Math.min(950,Math.round(elapsed*1.8)));
+   // Locked frames need no template matching; refresh their lightweight
+   // position check sooner. Heavy OCR keeps the existing phone-safe pacing.
+   var cachedFrame=!!(result&&result.smartLock&&result.smartLock.reused>0);
+   var minDelay=cachedFrame?240:350;
+   nextVisionDelay=Math.max(minDelay,
+     Math.min(950,Math.round(elapsed*(cachedFrame?1.3:1.8))));
    frameWorking=false;
   }
   setTimeout(tick,nextVisionDelay);
