@@ -19,9 +19,11 @@
  var BASE_CLASSES=[];
  BASE_RANKS.forEach(function(r){BASE_SUITS.forEach(function(s){BASE_CLASSES.push(r+s);});});
  var labelSource='remote';
- var MIN_CONFIDENCE=.86, MAX_ATTEMPTS=2, RETRY_MS=950;
+ var MIN_CONFIDENCE=.86, MAX_ATTEMPTS=IS_IOS?1:2, RETRY_MS=IS_IOS?1900:950;
+ var LIVE_COOLDOWN_MS=IS_IOS?2400:850,HARD_INFERENCE_MS=IS_IOS?9000:16000;
  var session=null, classes=null, state='idle', message='', loadPromise=null;
  var listeners=[], attempts=Object.create(null), sourceCanvas=null, sourceContext=null;
+ var inFlight=false,lastInferenceAt=0,lastInferenceMs=0,failures=0,cursor=0,rgbBuffer=null;
  var stage='not-started';
  var inputCanvas=null, inputContext=null;
  function notify(next,detail){
@@ -107,6 +109,8 @@
    sourceContext=sourceCanvas.getContext('2d',{willReadFrequently:true});
    inputCanvas=document.createElement('canvas');inputCanvas.width=640;inputCanvas.height=640;
    inputContext=inputCanvas.getContext('2d',{willReadFrequently:true});
+   // Reuse one 4.9 MB RGB buffer instead of allocating it for every frame.
+   rgbBuffer=new Float32Array(3*640*640);
   }
   return !!(sourceContext&&inputContext);
  }
@@ -114,21 +118,23 @@
  // Letterbox to 640x640 RGB CHW, as expected by YOLO11.
  function makeInput(img,box){
   if(!ensureCanvas())throw new Error('Canvas unavailable');
-  if(sourceCanvas.width!==img.width||sourceCanvas.height!==img.height){
-   sourceCanvas.width=img.width;sourceCanvas.height=img.height;
-  }
-  sourceContext.putImageData(img,0,0);
   var x=Math.max(0,Math.floor(box.x)),y=Math.max(0,Math.floor(box.y));
   var w=Math.min(img.width-x,Math.ceil(box.width));
   var h=Math.min(img.height-y,Math.ceil(box.height*.76));
   if(w<12||h<14)throw new Error('Card box too small for AI');
+  // Dirty-rectangle putImageData copies only the glyph crop; never retain
+  // a second full-frame canvas (especially expensive on iPhone Safari).
+  if(sourceCanvas.width!==w||sourceCanvas.height!==h){
+   sourceCanvas.width=w;sourceCanvas.height=h;
+  }
+  sourceContext.putImageData(img,-x,-y,x,y,w,h);
   var size=640,scale=Math.min(size/w,size/h);
   var dw=Math.round(w*scale),dh=Math.round(h*scale);
   var dx=Math.floor((size-dw)/2),dy=Math.floor((size-dh)/2);
   inputContext.fillStyle='#727272';inputContext.fillRect(0,0,size,size);
-  inputContext.drawImage(sourceCanvas,x,y,w,h,dx,dy,dw,dh);
+  inputContext.drawImage(sourceCanvas,0,0,w,h,dx,dy,dw,dh);
   var rgba=inputContext.getImageData(0,0,size,size).data;
-  var a=new Float32Array(3*size*size),pixels=size*size;
+  var a=rgbBuffer,pixels=size*size;
   for(var i=0;i<pixels;i++){
    a[i]=rgba[i*4]/255;a[i+pixels]=rgba[i*4+1]/255;a[i+2*pixels]=rgba[i*4+2]/255;
   }
@@ -179,44 +185,70 @@
   result.boardComplete=result.board.length>=3&&
    result.board.every(function(c){return !!c.code;})&&result.uniqueCards;
  }
- async function enrich(img,result){
+ async function enrich(img,result,options){
   if(!result||!img||!img.data)return result;
-  result.recognitionMode='ai-only';
-  result.aiAttempted=0;result.aiAssisted=0;
+  result.recognitionMode='ai-only';result.aiAttempted=0;result.aiAssisted=0;
   if(state!=='ready'||!session)return result;
-  // Prioritize the user's two cards, then the board, then revealed opponents.
+  if(inFlight){result.aiBusy=true;return result;}
+  var live=!!(options&&options.live),now=Date.now();
+  if(live&&now-lastInferenceAt<LIVE_COOLDOWN_MS){
+   result.aiCooldown=true;return result;
+  }
   var needsAI=function(c){return c.box&&!c.code&&!c.reused&&!c.locked;};
   var unrecognized=(result.hero||[]).filter(needsAI)
    .concat((result.board||[]).filter(needsAI))
    .concat((result.others||[]).filter(needsAI));
   if(!unrecognized.length)return result;
   var used=new Set(result.visible.filter(function(c){return !!c.code;}).map(function(c){return c.code;}));
-  var now=Date.now(),updated=0,tried=0;
-  for(var i=0;i<unrecognized.length&&tried<MAX_ATTEMPTS;i++){
-   var card=unrecognized[i],box=card.box;
-   var key=((result.hero||[]).indexOf(card)!==-1?'hero:':'board:')+
-    Math.round(box.x/12)+':'+Math.round(box.y/12)+':'+Math.round(box.width/12)+':'+Math.round(box.height/12);
-   if(now-(attempts[key]||0)<RETRY_MS)continue;
-   attempts[key]=now;tried++;
-   try{
-    var tensor=makeInput(img,box),inputs={};
-    inputs[session.inputNames[0]]=tensor;
-    var outputs=await session.run(inputs);
-    var match=rankOutput(outputs[session.outputNames[0]],classes);
-    if(maybeAttach(card,match,used))updated++;
-   }catch(err){
-    // Fail closed: never invent a card on inference errors.
-    result.aiError=String(err&&err.message||err);
+  var updated=0,tried=0,max=live?MAX_ATTEMPTS:(IS_IOS?2:3);
+  var start=live?cursor%unrecognized.length:0;
+  inFlight=true;
+  try{
+   for(var i=0;i<unrecognized.length&&tried<max;i++){
+    var idx=(start+i)%unrecognized.length,card=unrecognized[idx],box=card.box;
+    var category=(result.hero||[]).indexOf(card)!==-1?'hero:':
+      (result.board||[]).indexOf(card)!==-1?'board:':'other:';
+    var key=category+Math.round(box.x/12)+':'+Math.round(box.y/12)+':'+
+      Math.round(box.width/12)+':'+Math.round(box.height/12);
+    if(now-(attempts[key]||0)<RETRY_MS)continue;
+    attempts[key]=now;tried++;cursor=idx+1;
+    var tensor=null,outputs=null,started=Date.now();
+    try{
+     tensor=makeInput(img,box);
+     var inputs={};inputs[session.inputNames[0]]=tensor;
+     lastInferenceAt=Date.now();
+     outputs=await session.run(inputs);
+     lastInferenceMs=Date.now()-started;failures=0;
+     var match=rankOutput(outputs[session.outputNames[0]],classes);
+     if(maybeAttach(card,match,used))updated++;
+     if(lastInferenceMs>HARD_INFERENCE_MS){
+      notify('unavailable','AI отне '+lastInferenceMs+' ms; спрян за защита на паметта. Презареди страницата.');
+      break;
+     }
+    }catch(err){
+     result.aiError=String(err&&err.message||err);failures++;
+     if(failures>=2||/out of memory|memory access|allocation|wasm|heap/i.test(result.aiError)){
+      notify('unavailable','AI inference: '+result.aiError.slice(0,170));
+      break;
+     }
+    }finally{
+     if(tensor&&typeof tensor.dispose==='function'){try{tensor.dispose();}catch(_){}}
+     if(outputs)Object.keys(outputs).forEach(function(k){
+      var out=outputs[k];if(out&&typeof out.dispose==='function'){
+       try{out.dispose();}catch(_){}
+      }
+     });
+    }
    }
-  }
+  }finally{inFlight=false;}
   if(updated){summarize(result);result.aiAssisted=updated;}
   result.aiAttempted=tried;
   return result;
  }
- function resetHand(){attempts=Object.create(null);}
+ function resetHand(){attempts=Object.create(null);cursor=0;}
  root.ACRAI={
   start:start,subscribe:subscribe,enrich:enrich,resetHand:resetHand,
-  status:function(){return {state:state,message:message,stage:stage,labelSource:labelSource,runtime:ORT_VERSION};},
+  status:function(){return {state:state,message:message,stage:stage,labelSource:labelSource,runtime:ORT_VERSION,lastInferenceMs:lastInferenceMs,busy:inFlight};},
   rankOutput:rankOutput,namesFromJson:namesFromJson
  };
 }(typeof window!=='undefined'?window:globalThis));
