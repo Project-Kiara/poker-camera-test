@@ -231,7 +231,7 @@
       </div>
     </div>
     <div class="camera-state" aria-live="polite">
-      <span id="status">Състояние: не е стартирана.</span>
+      <span id="status">Състояние: не е стартирана.</span> <span id="aiStatus" role="status" title="AI се зарежда отделно от камерата" style="font-size:11px;color:#98e3ff;margin-left:8px">AI: зарежда се…</span>
       <details><summary>Детайли</summary><p id="details">Разрешението за камера ще бъде поискано след натискане на бутона.</p></details>
     </div>
 
@@ -671,7 +671,22 @@
 <script src="./acr-vision.js?v=right-hero-r32"></script>
   <script src="./acr-temporal.js?v=right-hero-r32"></script>
   <script src="./acr-smart-lock.js?v=right-hero-r32"></script>
-  <script src="./acr-auto.js?v=right-hero-r32"></script>
+  <script src="./acr-ai.js?v=ai-warm-r33"></script>
+  <script>
+  (function(){
+    var ai=window.ACRAI,indicator=document.getElementById('aiStatus');
+    if(!ai||!indicator)return;
+    ai.subscribe(function(status){
+      var labels={idle:'AI: подготвя се',loading:'AI: зарежда се…',ready:'AI готов',
+        unavailable:'AI недостъпен · стандартно разпознаване'};
+      indicator.textContent=labels[status.state]||'AI: неизвестно състояние';
+      indicator.title=status.message||'';
+    });
+    // Run automatically, without blocking the camera authorization or classic OCR.
+    setTimeout(function(){ai.start();},0);
+  })();
+  </script>
+  <script src="./acr-auto.js?v=ai-warm-r33"></script>
   <script src="./camera-hud.js?v=right-hero-r32"></script>
 </body>
 </html>
