@@ -83,7 +83,8 @@
  var debugCanvas=document.getElementById('visionDebug');
  var ocrReports=document.getElementById('ocrCardReports');
  var contextCanvas=document.createElement('canvas'),ctx=contextCanvas.getContext('2d',{willReadFrequently:true});
- var lastSignature='',repeats=0,lastApplied='',frameWorking=false;
+ var lastSignature='',repeats=0,lastApplied='',frameWorking=false,photoWorking=false;
+ var onIPhone=/iPhone|iPad|iPod/.test(navigator.userAgent||'');
  var ownCodes=[],boardCodes=[],previousHeroWasAuto=false;
  var recognitionBlocked=false,recoveryPending=false;
  var temporal=window.ACRTemporal&&window.ACRTemporal.createTracker();
@@ -357,7 +358,7 @@
   if(ai)ai.resetHand();
   var start=Date.now();
   var result=vision.analyze(img,{aiOnly:true});
-  if(aiReady())await ai.enrich(img,result);
+  if(aiReady())await ai.enrich(img,result,{live:false});
   else suspendAnalysis('AI не е готов. Изчаквам AI модела; старото OCR е изключено.');
   emitText(result,confirmed);
   diagnostics(result,sourceInfo);
@@ -394,10 +395,12 @@
  }
  // Freeze the CURRENT already-authorized video frame, without reopening camera.
  captureButton.addEventListener('click',async function(){
+  if(photoWorking||frameWorking){status.textContent='Изчакай текущата AI проверка да приключи.';return;}
   if(video.readyState<2||!video.videoWidth||!video.videoHeight||video.paused){
    status.textContent='Първо включи камерата и изчакай картината.';
    return;
   }
+  photoWorking=true;
   try{
    var frame=canvasImage(video,true);
    var result=await inspect(frame,true,{
@@ -409,15 +412,20 @@
    status.textContent='Видео кадър: '+video.videoWidth+' × '+video.videoHeight+'; OCR: '+frame.width+' × '+frame.height+'. '+result.faceCount+' открити карти; '+result.visible.filter(function(c){return !!c.code;}).length+' разчетени.';
   }catch(err){
    status.textContent='Кадърът не можа да се обработи: '+err.message;
-  }
+  }finally{photoWorking=false;}
  });
 
  function processImageInput(sourceInput){
   if(!sourceInput.files||!sourceInput.files[0])return;
+  if(photoWorking){status.textContent='Изчакай текущата снимка.';return;}
+  photoWorking=true;
   var source=URL.createObjectURL(sourceInput.files[0]),img=new Image();
   status.textContent='Обработвам снимката…';
   img.onload=async function(){
    try{
+    // Do not overlap a still-photo session with an in-flight camera inference.
+    var waiting=0;
+    while(frameWorking&&waiting++<35){await new Promise(function(ok){setTimeout(ok,120);});}
     // Keep original resolution when possible for reading small glyphs.
     var frame=canvasImage(img,true),result=await inspect(frame,true,{
      originalWidth:img.naturalWidth,originalHeight:img.naturalHeight,
@@ -436,27 +444,31 @@
         ' открити карти; има неясни или непотвърдени AI резултати.';
    }catch(err){status.textContent='Неуспешно разчитане: '+err.message;}
    URL.revokeObjectURL(source);
-   sourceInput.value=''; // Enable retesting the same image without a full page reload.
+   sourceInput.value='';photoWorking=false; // Permit retesting the same image.
   };
-  img.onerror=function(){status.textContent='Снимката не може да се отвори.';URL.revokeObjectURL(source);sourceInput.value='';};
+  img.onerror=function(){status.textContent='Снимката не може да се отвори.';URL.revokeObjectURL(source);sourceInput.value='';photoWorking=false;};
   img.src=source;
  }
  file.addEventListener('change',function(){processImageInput(file);});
  nativeFile.addEventListener('change',function(){processImageInput(nativeFile);});
- var nextVisionDelay=350;
+ var nextVisionDelay=onIPhone?2700:800;
  async function tick(){
   captureButton.disabled=!(video.readyState>=2&&video.videoWidth&&!video.paused);
-  if(frameWorking){setTimeout(tick,350);return;}
+  if(frameWorking||photoWorking){setTimeout(tick,onIPhone?1000:450);return;}
   if(video.readyState>=2&&video.videoWidth&&!video.paused){
+   if(!aiReady()){
+    if(!recognitionBlocked)suspendAnalysis('AI моделът не е готов. Камерата остава активна, но не обработва кадри.');
+    setTimeout(tick,1800);return;
+   }
    frameWorking=true;
+   var startedAt=Date.now(),result=null;
    try{
-    var startedAt=Date.now();
     var frame=canvasImage(video,true);
-    var result=smartLock&&temporal?
-      await smartLock.process(frame,vision,temporal,Date.now(),aiReady()?ai.enrich:null,{aiOnly:true}):
+    result=smartLock&&temporal?
+      await smartLock.process(frame,vision,temporal,Date.now(),function(pic,out){return ai.enrich(pic,out,{live:true});},{aiOnly:true}):
       vision.analyze(frame,{aiOnly:true});
     if(!smartLock){
-      if(aiReady())await ai.enrich(frame,result);
+      await ai.enrich(frame,result,{live:true});
       if(temporal)temporal.observe(result,Date.now());
     }
     var signature=result.stage+','+result.board.map(function(c){return c.code||'?';}).join('|')+','+
@@ -496,9 +508,12 @@
    // Locked frames need no repeated AI; refresh their lightweight
    // position check sooner. Heavy AI keeps the existing phone-safe pacing.
    var cachedFrame=!!(result&&result.smartLock&&result.smartLock.reused>0);
-   var minDelay=cachedFrame?240:350;
+   // iPhone 7 Plus cannot sustain repeated 640x640 WASM calls.
+   // Hold several seconds between captures; the model has its own cooldown.
+   var minDelay=onIPhone?2600:(cachedFrame?500:700);
+   var maxDelay=onIPhone?6500:2200;
    nextVisionDelay=Math.max(minDelay,
-     Math.min(950,Math.round(elapsed*(cachedFrame?1.3:1.8))));
+     Math.min(maxDelay,Math.round(elapsed*(onIPhone?1.7:1.4))));
    frameWorking=false;
   }
   setTimeout(tick,nextVisionDelay);
