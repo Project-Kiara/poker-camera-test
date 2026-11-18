@@ -11,6 +11,8 @@ p{color:#c1d1e2}a{color:#a1d9ff}li{padding:7px;border-bottom:1px solid #35465b}.
 <script src="./card-detector.js?v=right-hero-r32"></script>
 <script src="./acr-template-bank.js?v=packed-r20"></script>
 <script src="./acr-vision.js?v=right-hero-r32"></script>
+<script src="./acr-temporal.js?v=right-hero-r32"></script>
+<script src="./acr-smart-lock.js?v=right-hero-r32"></script>
 <script>
 (function(){
 'use strict';
@@ -95,6 +97,27 @@ function run(){
  var lone=ACRVision.analyze(empty);
  check('Без истинска втора карта не се създава фалшива лична карта',
   lone.guidedBoxes===0&&lone.hero.length!==2);
+ // Full integration, no mocked card recognizer: when the right hand is
+ // darkened the new guided geometry should still reach the temporal memory.
+ var tracker=ACRTemporal.createTracker(),smart=ACRSmartLock.create();
+ function darkPair(codes){
+  var frame=fixture(codes,.55);
+  for(var yy=top;yy<top+cardH;yy++)for(var xx=lefts[1];xx<lefts[1]+cardW;xx++){
+   var idx=(yy*W+xx)*4;
+   for(var ch=0;ch<3;ch++)frame.data[idx+ch]=Math.round(frame.data[idx+ch]*.77);
+  }
+  return frame;
+ }
+ var live=darkPair(['4s','10s']);
+ var pass1=smart.process(live,ACRVision,tracker,1000);
+ var pass2=smart.process(live,ACRVision,tracker,1500);
+ var pass3=smart.process(live,ACRVision,tracker,2000);
+ check('Потъмнялата дясна карта 10♠ достига потвърждаването',
+  pass1.hero.length===2&&pass1.hero[1].code==='10s'&&
+  pass2.smartLock.locked===2);
+ check('След заключване OCR пропуска и двете лични карти',
+  pass3.reusedReads===2&&pass3.ocrReads===0&&
+  pass3.hero.every(function(c){return c.locked&&c.code;}));
  return tests;
 }
 document.getElementById('start').addEventListener('click',function(){
