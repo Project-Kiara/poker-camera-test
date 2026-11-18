@@ -33,6 +33,17 @@
  function subscribe(fn){
   if(typeof fn==='function'){listeners.push(fn);fn({state:state,message:message});}
  }
+ function disableAI(reason){
+  var active=session;session=null;loadPromise=null;
+  notify('unavailable',reason);
+  // Free model-owned WASM resources if inference gets too slow or fails.
+  if(active&&typeof active.release==='function'){
+   try{
+    var releaseResult=active.release();
+    if(releaseResult&&typeof releaseResult.catch==='function')releaseResult.catch(function(){});
+   }catch(_){}
+  }
+ }
  function loadRuntime(){
   if(root.ort&&root.ort.InferenceSession)return Promise.resolve(root.ort);
   return new Promise(function(resolve,reject){
@@ -222,13 +233,13 @@
      var match=rankOutput(outputs[session.outputNames[0]],classes);
      if(maybeAttach(card,match,used))updated++;
      if(lastInferenceMs>HARD_INFERENCE_MS){
-      notify('unavailable','AI отне '+lastInferenceMs+' ms; спрян за защита на паметта. Презареди страницата.');
+      disableAI('AI отне '+lastInferenceMs+' ms; спрян за защита на паметта. Презареди страницата.');
       break;
      }
     }catch(err){
      result.aiError=String(err&&err.message||err);failures++;
      if(failures>=2||/out of memory|memory access|allocation|wasm|heap/i.test(result.aiError)){
-      notify('unavailable','AI inference: '+result.aiError.slice(0,170));
+      disableAI('AI inference: '+result.aiError.slice(0,170));
       break;
      }
     }finally{
