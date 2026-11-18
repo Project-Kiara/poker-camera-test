@@ -27,9 +27,9 @@
   '<p class="analysis-message" id="visionStatus" role="status" aria-live="polite">Включи камерата или качи снимка.</p>',
   '<details class="extra-settings">',
   '<summary>Допълнителни данни и OCR диагностика</summary>',
-  '<p class="hint" id="ocrVersion">Интерфейс r32 · OCR r19 (отделно разпознаване на дясната карта) · 17.11.2026</p>',
+  '<p class="hint" id="ocrVersion">Интерфейс r34 · OCR r19 + ONNX AI (резервен метод) · 18.11.2026</p>',
   '<p class="hint" id="ocrCoverage">Проверявам наличните OCR образци…</p>',
-  '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r32">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r26">Проверка със снимани символи</a> · <a href="./ocr-hero-overlap-tests.html?v=r32">Тест: близки карти и аватар</a> · <a href="./ocr-smart-lock-tests.html?v=r32">Тест: Smart Recognition Lock</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
+  '<p class="hint"><a href="./ocr-selftest.html?v=r23">Тест на 52 синтетични карти</a> · <a href="./ocr-library-tests.html?v=r23">Геометрична проверка на 52 карти</a> · <a href="./ocr-temporal-tests.html?v=r32">Тест на няколко кадъра</a> · <a href="./ocr-photo-mask-test.html?v=r26">Проверка със снимани символи</a> · <a href="./ocr-hero-overlap-tests.html?v=r32">Тест: близки карти и аватар</a> · <a href="./ocr-smart-lock-tests.html?v=r32">Тест: Smart Recognition Lock</a> · <a href="./ocr-ai-fallback-tests.html?v=r34">Тест: резервен ONNX AI</a> · <a href="./ocr-regression.html?v=r23">Разширена ACR диагностика</a> · <a href="./ocr-shaded-tests.html?v=r23">Тестове за личните карти и бутоните</a></p>',
   '<div class="config-row">',
   '<label><input id="autoHero" type="checkbox" checked style="width:auto;margin-right:5px">Моите карти са долу</label>',
   '<label><input id="autoPlayers" type="checkbox" checked style="width:auto;margin-right:5px">Автоматичен брой играчи</label>',
@@ -173,7 +173,7 @@
   if(update.handChanged){
    if(temporal)temporal.reset();
    if(smartLock)smartLock.reset();
-  if(ai)ai.resetHand();
+   if(ai)ai.resetHand();
    clearAutoInputs();
    memoryStatus.textContent='Ново раздаване е потвърдено; паметта е нулирана.';
    recoveryPending=true;
@@ -225,7 +225,11 @@
     'Открити правоъгълници: '+cards.length,
     'Игнорирани обекти от областта на бутоните: '+(result.ignoredUiBoxes||0),
     'Потвърдени стойност+боя: '+cards.filter(function(c){return !!c.code;}).length,
-    'Непотвърдени: '+cards.filter(function(c){return !c.code;}).length];
+    'Непотвърдени: '+cards.filter(function(c){return !c.code;}).length,
+    'Резервен AI: '+(ai?ai.status().state:'липсва')+
+      ' · опити: '+(result.aiAttempted||0)+
+      ' · допълнени карти: '+(result.aiAssisted||0)+
+      (result.aiError?' · проблем: '+result.aiError:'')];
   cards.forEach(function(c,i){
    var x=c.box.x,y=c.box.y;
    var scoreRank=typeof c.rankScore==='number'?c.rankScore+'%':'няма';
