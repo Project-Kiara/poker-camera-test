@@ -473,6 +473,9 @@ function groupVisible(cards,w,h){
    others:cards.filter(function(c){return selected.indexOf(c)<0;})};
 }
 function analyze(img,options){
+ // Geometry is still detected locally; in aiOnly mode card identities
+ // can only come from the neural network or its previously verified locks.
+ var aiOnly=!!(options&&options.aiOnly);
  var detect=root.PokerCardDetector,boxes=detect?detect.detect(img):[];
  var initialBoxes=boxes.length;
  if(detect&&detect.recoverHeroPair)
@@ -498,6 +501,9 @@ function analyze(img,options){
     card.suit=cached.code.slice(-1);card.reused=true;card.temporal=true;
     card.reason='Заключена карта; проверена позиция, OCR пропуснат';
     reusedReads++;
+   }else if(aiOnly){
+    // Never call legacy OCR to assign rank, suit, code, guess or a pending card.
+    card.aiPending=true;
    }else{
     var fresh=classify(img,card.box);
     Object.keys(fresh).forEach(function(key){card[key]=fresh[key];});
@@ -526,7 +532,7 @@ function analyze(img,options){
   return x>.25&&x<.75&&y>.20&&y<.72;
  });
  return {visible:face,board:board,hero:hero,others:groups.others,
-  ocrReads:ocrReads,reusedReads:reusedReads,guidedBoxes:boxes.length-initialBoxes,
+  ocrReads:ocrReads,reusedReads:reusedReads,recognitionMode:aiOnly?'ai-only':'ocr',guidedBoxes:boxes.length-initialBoxes,
   ignoredUiBoxes:ignoredUi,
   faceCount:face.length,coveredHands:otherBacks.length,backPairs:otherBacks,
   activePlayers:otherBacks.length+(hero.length===2?1:0),
