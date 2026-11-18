@@ -303,6 +303,19 @@
       }
       return total?white/total:0;
     }
+    function leftEdgeGain(box){
+      var x=Math.round(box.x),start=Math.round(box.y+box.height*.16),
+        end=Math.round(box.y+box.height*.59);
+      if(x<3||x>w-4)return 0;
+      var gain=0,count=0;
+      for(var yy=start;yy<end;yy+=4){
+        var p=(yy*w+x-2)*4,q=(yy*w+x+2)*4;
+        var before=Math.min(d[p],d[p+1],d[p+2]);
+        var after=Math.min(d[q],d[q+1],d[q+2]);
+        gain+=after-before;count++;
+      }
+      return count?gain/count:0;
+    }
     function intersects(box){
       return boxes.some(function(other){
        var dx=Math.max(0,Math.min(box.x+box.width,other.x+other.width)-
@@ -347,8 +360,16 @@
       var score=patchScore(c);
       // Most of the clean top/inner card must actually be near white.
       if(score<.66)return;
-      score+=c.fromMemory?.08:0;
-      var pairCenter=(eligible[0].x+eligible[0].width*.5+
+      // A real left card edge has a dark→light vertical transition.
+      // Without this term, the whitest crop drifts several pixels to the
+      // right, cropping off exactly the small right-hand rank/suit icons.
+      var gain=leftEdgeGain(c);
+      score+=Math.max(-.12,Math.min(.26,gain/270));
+      var neighbor=eligible[0];
+      var separation=Math.abs(c.x-neighbor.x)/neighbor.width;
+      score-=Math.abs(separation-1.04)*.35;
+      score+=c.fromMemory?.11:0;
+      var pairCenter=(neighbor.x+neighbor.width*.5+
          c.x+c.width*.5)/(2*w);
       score-=Math.abs(pairCenter-.5)*.16;
       if(!winning||score>winning.score)winning={box:c,score:score};
