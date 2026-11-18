@@ -212,29 +212,6 @@
       }
     }
 
-    #aiErrorDetail {
-      position:fixed;top:calc(max(12px, env(safe-area-inset-top)) + 128px);
-      right:max(12px, env(safe-area-inset-right));z-index:6;
-      width:min(238px,55vw);padding:6px 8px;border-radius:8px;
-      background:rgba(55,18,28,.79);border:1px solid rgba(255,179,180,.28);
-      color:#ffe2e2;font-size:10px;line-height:1.28;
-      white-space:normal;overflow-wrap:anywhere;pointer-events:none;
-    }
-    #aiErrorDetail[hidden]{display:none!important}
-    #aiStatus[data-state="unavailable"]{cursor:pointer;pointer-events:auto;border-color:rgba(255,180,180,.5);color:#fff1f1!important;}
-    /* Small live AI status: visible above the full-screen camera preview. */
-    #aiStatus {
-      position:fixed;
-      top:calc(max(12px, env(safe-area-inset-top)) + 53px);
-      right:max(12px, env(safe-area-inset-right));
-      z-index:6;pointer-events:none;
-      max-width:190px;max-width:min(190px,45vw);
-      border:1px solid rgba(195,233,255,.22);border-radius:8px;
-      padding:5px 7px;background:rgba(7,22,38,.46);
-      -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);
-      font-size:10px!important;line-height:1.25;color:#d1f7ff!important;
-      text-align:right;overflow-wrap:anywhere;
-    }
   </style>
 </head>
 <body>
@@ -254,8 +231,7 @@
       </div>
     </div>
     <div class="camera-state" aria-live="polite">
-      <span id="status">Състояние: не е стартирана.</span> <span id="aiStatus" role="status" tabindex="0" title="AI се зарежда отделно от камерата" style="font-size:11px;color:#98e3ff;margin-left:8px">AI: зарежда се…</span>
-      <span id="aiErrorDetail" hidden></span>
+      <span id="status">Състояние: не е стартирана.</span>
       <details><summary>Детайли</summary><p id="details">Разрешението за камера ще бъде поискано след натискане на бутона.</p></details>
     </div>
 
@@ -308,7 +284,7 @@
       </div>
       <p class="fineprint">Вероятностите са ориентировъчни при случайни неизвестни карти на противниците. Не предсказват техните решения или точната им сила. Изчисленията се изпълняват само в браузъра.</p>
     </section>
-    <p class="foot">Само AI определя стойността и боята на картите. Обработката на кадрите остава локална. AI: <a href="https://huggingface.co/sroot/lgd-cards-gen3" style="color:#a5d9fa">LGD Cards Gen 3</a> (AGPL-3.0) · <a href="https://github.com/Project-Kiara/poker-camera-test" style="color:#a5d9fa">Изходен код</a>. Непотвърдените карти не се отгатват.</p>
+    <p class="foot">Обработката е локална. Неразпознатите карти не се отгатват.</p>
   </main>
   <script>
     (function () {
@@ -360,9 +336,7 @@
           // Never request microphone access. OCR uses original frame pixels, not CSS preview size.
           stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{
             facingMode:{ideal:'environment'},
-            // High-resolution 30fps capture plus WASM inference was exhausting
-            // Safari on iPhone 7 Plus. Use camera-native 720p/15fps instead.
-            width:{ideal:1280},height:{ideal:720},frameRate:{ideal:15,max:20}
+            width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:24}
           }});
           video.srcObject=stream;
           try{await video.play();}catch(_){}
@@ -693,40 +667,11 @@
   }());
   </script>
 <script src="./card-detector.js?v=right-hero-r32"></script>
-<script src="./acr-vision.js?v=ai-only-r36"></script>
+  <script src="./acr-template-bank.js?v=ocr-restored-r38"></script>
+<script src="./acr-vision.js?v=ocr-restored-r38"></script>
   <script src="./acr-temporal.js?v=right-hero-r32"></script>
-  <script src="./acr-smart-lock.js?v=ai-only-r36"></script>
-  <script src="./acr-ai.js?v=ios-guard-r37"></script>
-  <script>
-  (function(){
-    var ai=window.ACRAI,indicator=document.getElementById('aiStatus');
-    var errorLine=document.getElementById('aiErrorDetail');
-    if(!ai||!indicator)return;
-    ai.subscribe(function(status){
-      var labels={idle:'AI: подготвя се',loading:'AI: зарежда се…',ready:'AI режим · готов',
-        unavailable:'AI недостъпен · натисни за повторен опит'};
-      indicator.textContent=labels[status.state]||'AI: неизвестно състояние';
-      indicator.dataset.state=status.state;
-      indicator.title=status.message||'';
-      if(errorLine){
-        errorLine.hidden=status.state!=='unavailable';
-        errorLine.textContent=status.state==='unavailable'?
-          'Причина: '+(status.message||'неизвестна грешка'):'';
-      }
-    });
-    function retry(){
-      if(ai.status().state==='unavailable')ai.start();
-    }
-    indicator.addEventListener('click',retry);
-    indicator.addEventListener('keydown',function(e){
-      if(e.key==='Enter'||e.key===' '){e.preventDefault();retry();}
-    });
-    window.addEventListener('online',retry);
-    // Run automatically, without blocking the camera authorization or classic OCR.
-    setTimeout(function(){ai.start();},0);
-  })();
-  </script>
-  <script src="./acr-auto.js?v=ios-guard-r37"></script>
+  <script src="./acr-smart-lock.js?v=ocr-restored-r38"></script>
+  <script src="./acr-auto.js?v=ocr-restored-r38"></script>
   <script src="./camera-hud.js?v=right-hero-r32"></script>
 </body>
 </html>
