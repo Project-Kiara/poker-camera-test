@@ -5,7 +5,7 @@
  */
 (function(root){
  'use strict';
- var WINDOW_MS=6500,LOCK_MS=12000;
+ var WINDOW_MS=7000,LOCK_MS=120000;
  function createTracker(){
   var slots={board:[],hero:[]},stage='',preflopFrames=0;
   var newCandidate='',newCandidateFrames=0;
@@ -159,7 +159,7 @@
       // The rectangle is still visible and no recognized glyph contradicts
       // the previous locked identity. Keep that card briefly while OCR blurs.
       if(now-tr.lockedAt<=LOCK_MS){
-       card.code=tr.locked;card.rank=lockRank;card.suit=lockSuit;
+       card.code=tr.locked;card.rank=lockRank;card.suit=lockSuit;card.locked=true;
        if(!code){
         card.temporal=true;card.remembered=true;
         card.reason='Запомнена карта от същата позиция в раздаването';
@@ -178,17 +178,23 @@
       if(p.rank)r[p.rank]=(r[p.rank]||0)+1;
       if(p.suit)s[p.suit]=(s[p.suit]||0)+1;
      });
-     var ranks=Object.keys(r).filter(function(k){return r[k]>=2;});
-     var suits=Object.keys(s).filter(function(k){return s[k]>=2;});
-     // Mixed observations can be fused only when there is ONE unambiguous
-     // candidate for each symbol, with at least two supporting frames each.
-     if(ranks.length===1&&suits.length===1&&
-        Object.keys(r).length===1&&Object.keys(s).length===1){
-      tr.locked=ranks[0]+suits[0];tr.lockedAt=now;
+     // A single mistaken OCR frame should not poison the right-hand
+     // symbol history for another several seconds. Each glyph must win
+     // two independent observations; any rival needs a 2-vote margin.
+     function winner(counts){
+      var keys=Object.keys(counts).sort(function(a,b){return counts[b]-counts[a];});
+      if(!keys.length)return null;
+      var first=counts[keys[0]],second=keys.length>1?counts[keys[1]]:0;
+      return first>=2&&first-second>=(second?2:1)?keys[0]:null;
+     }
+     var winningRank=winner(r),winningSuit=winner(s);
+     if(winningRank&&winningSuit){
+      tr.locked=winningRank+winningSuit;tr.lockedAt=now;
+      card.locked=true;
       if(!code){
-       card.code=tr.locked;card.rank=ranks[0];card.suit=suits[0];
+       card.code=tr.locked;card.rank=winningRank;card.suit=winningSuit;
        card.temporal=true;
-       card.reason='Два потвърдени кадъра за стойност и боя';
+       card.reason='Стойността и боята са потвърдени в няколко кадъра';
       }
      }
     }
