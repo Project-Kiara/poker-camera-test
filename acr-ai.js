@@ -7,8 +7,12 @@
  'use strict';
  var MODEL='https://huggingface.co/sroot/lgd-cards-gen3/resolve/main/model.onnx';
  var CLASSES='https://huggingface.co/sroot/lgd-cards-gen3/resolve/main/model.classes.json';
- var RUNTIME='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
- var RUNTIME_FALLBACK='https://unpkg.com/onnxruntime-web@1.22.0/dist/';
+ // WebKit/iOS has documented WASM memory regressions in newer runtimes.
+ // 1.18.0 single-threaded, scalar WASM is the conservative Safari fallback.
+ var IS_IOS=!!(root.navigator&&/iPhone|iPad|iPod/.test(root.navigator.userAgent));
+ var ORT_VERSION=IS_IOS?'1.18.0':'1.22.0';
+ var RUNTIME='https://cdn.jsdelivr.net/npm/onnxruntime-web@'+ORT_VERSION+'/dist/';
+ var RUNTIME_FALLBACK='https://unpkg.com/onnxruntime-web@'+ORT_VERSION+'/dist/';
  // From the upstream Gen 3 model card, in the exact ONNX class order.
  var BASE_RANKS=['10','2','3','4','5','6','7','8','9','A','J','K','Q'];
  var BASE_SUITS=['C','D','H','S'];
@@ -78,6 +82,7 @@
    stage='ONNX/WASM модел';
    notify('loading','Изтеглям и стартирам ONNX модела…');
    ort.env.wasm.wasmPaths=RUNTIME;ort.env.wasm.numThreads=1;
+   if(IS_IOS&&'simd' in ort.env.wasm)ort.env.wasm.simd=false;
    if('proxy' in ort.env.wasm)ort.env.wasm.proxy=false;
    return ort.InferenceSession.create(MODEL,{executionProviders:['wasm'],graphOptimizationLevel:'all'});
   }).then(function(model){
@@ -207,7 +212,7 @@
  function resetHand(){attempts=Object.create(null);}
  root.ACRAI={
   start:start,subscribe:subscribe,enrich:enrich,resetHand:resetHand,
-  status:function(){return {state:state,message:message,stage:stage,labelSource:labelSource};},
+  status:function(){return {state:state,message:message,stage:stage,labelSource:labelSource,runtime:ORT_VERSION};},
   rankOutput:rankOutput,namesFromJson:namesFromJson
  };
 }(typeof window!=='undefined'?window:globalThis));
