@@ -275,7 +275,7 @@
     var eligible=boxes.filter(function(b){
       var cx=(b.x+b.width*.5)/w,cy=(b.y+b.height*.5)/h;
       return cx>.15&&cx<.85&&cy>.67&&cy<.92&&
-       b.width>=w*.038&&b.width<=w*.24&&
+       b.width>=w*.038&&b.width<=w*.32&&
        b.height>=h*.06&&b.height<=h*.24;
     }).sort(function(a,b){return a.x-b.x;});
     function sameRow(a,b){
