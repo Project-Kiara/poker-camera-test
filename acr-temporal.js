@@ -166,7 +166,7 @@
        }
        // A remembered placeholder must not extend the time-to-live of
        // its own evidence. Only a fresh complete OCR reading does that.
-       if(code===tr.locked)tr.lockedAt=now;
+       if(code===tr.locked&&!card.reused)tr.lockedAt=now;
       }
       continue;
      }
@@ -220,7 +220,21 @@
      board.every(function(c){return validCode(c.code);})&&result.uniqueCards;
    return result;
   }
-  return {observe:observe,reset:reset};
+  function lockedSlots(now){
+   now=typeof now==='number'?now:Date.now();
+   var output={board:[],hero:[]};
+   ['board','hero'].forEach(function(kind){
+    slots[kind].forEach(function(track,i){
+     if(!track||!track.locked||now-track.lockedAt>LOCK_MS||
+        now<track.lockedAt)return;
+     output[kind][i]={code:track.locked,at:track.lockedAt,
+      box:{x:track.cx-track.w/2,y:track.cy-track.h/2,
+       width:track.w,height:track.h}};
+    });
+   });
+   return output;
+  }
+  return {observe:observe,reset:reset,lockedSlots:lockedSlots};
  }
  root.ACRTemporal={createTracker:createTracker};
 }(typeof window!=='undefined'?window:globalThis));
