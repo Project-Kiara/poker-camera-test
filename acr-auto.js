@@ -50,13 +50,9 @@
   '</details>'
  ].join('');
  analysis.parentNode.insertBefore(section,analysis);
- var coverage=vision.templateCoverage&&vision.templateCoverage();
+ // AI-only startup: do not create the expensive OCR font/template bank.
  var coverageLabel=document.getElementById('ocrCoverage');
- if(coverageLabel&&coverage){
-  var library=vision.cardLibrary&&vision.cardLibrary();
-  coverageLabel.textContent='OCR образци: '+coverage.ranks+'/13 стойности × '+coverage.suits+'/4 бои = '+coverage.combinations+'/52 комбинации. ACR калибрирани символи: '+coverage.calibratedRanks+'/13 стойности, '+coverage.calibratedSuits+'/4 бои. Резервни шрифтови образци: да.'+
-   (library?' Вградена библиотека: '+library.cards+' комбинации; '+library.rankVariants+' варианти на стойности и '+library.suitVariants+' на бои. Не всички карти имат реални фотографски образци.':'');
- }
+ if(coverageLabel)coverageLabel.textContent='Само AI ONNX разпознава стойност и боя; OCR шаблоните не се зареждат.';
  // The calculator inputs stay mounted for the existing engine but the user
  // sees one combined auto-recognition + probability panel.
  var summaryGrid=analysis.querySelector('.result-grid');
@@ -221,7 +217,7 @@
   result.hero.forEach(function(c){regions[c.box.x+','+c.box.y]='Лични';});
   result.others.forEach(function(c){regions[c.box.x+','+c.box.y]='Други';});
   var cards=result.visible.slice().sort(function(a,b){return a.box.y-b.box.y||a.box.x-b.box.x;});
-  var lines=['OCR версия: r22 · фотообразци и позиционна памет | '+(vision.templateCoverage?'13 стойности и 4 бои са представени в образците':'проверка на образците недостъпна'),
+  var lines=['AI-only r36 · локална геометрия + невронен ONNX модел',
     sourceInfo?'Източник: '+sourceInfo.originalWidth+'×'+sourceInfo.originalHeight+' → OCR: '+sourceInfo.ocrWidth+'×'+sourceInfo.ocrHeight+(sourceInfo.canonical?' (каноничен мащаб ACR)':' (общ мащаб)'):'Източник: видео кадър',
     'Открити правоъгълници: '+cards.length,
     'Игнорирани обекти от областта на бутоните: '+(result.ignoredUiBoxes||0),
