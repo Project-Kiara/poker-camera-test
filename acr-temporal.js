@@ -74,8 +74,14 @@
    // When the camera missed the old flop/river, both deals can appear as
    // consecutive preflops. Previously the old hero was locked forever:
    // every correctly read new hero was discarded as a contradiction.
+   var newVisibleHero=hero.filter(function(c,i){
+    return c&&!c.reused&&validCode(c.code)&&slots.hero[i]&&
+      slots.hero[i].locked&&c.code!==slots.hero[i].locked;
+   }).length;
+   // Even if only one card changes, the next deal must be recoverable.
+   // Only fresh OCR can act as evidence of replacement, never cached codes.
    var preflopReplacement=preflop&&stage==='Префлоп'&&
-      ownChanges&&hero.length===2&&hero.every(function(c){return validCode(c.code);});
+      hero.length===2&&lockedHero&&newVisibleHero>=1;
    if(lateDeal||preflopReplacement||newBoardOnly){
     var signature=(preflopReplacement?'P:':'B:')+
       (rawHero||hero.map(function(c){return validCode(c.code)?c.code:'?';}).join('|'))+
@@ -83,11 +89,16 @@
     newCandidateFrames=signature===newCandidate?newCandidateFrames+1:1;
     newCandidate=signature;
     result.temporalPending=newCandidateFrames;
-    // Without two confirmed personal cards require stronger board evidence.
-    var requiredFrames=newBoardOnly&&!rawHero&&board.length>=oldBoardSize?4:3;
+    // Incomplete personal hands and one-card replacements need more
+    // independent frames than a replacement of both visible cards.
+    var freshHero=hero.filter(function(c){return c&&!c.reused&&validCode(c.code);}).length;
+    var requiredFrames=newBoardOnly&&!rawHero&&board.length>=oldBoardSize?4:
+      preflopReplacement?(freshHero<2?5:newVisibleHero===1?4:3):3;
     if(newCandidateFrames>=requiredFrames){
-     // The new OCR identity has independently persisted for 3 frames;
-     // reset both card slots and the deal memory as one transition.
+     // An old cached identity is never carried into a new deal.
+     hero.forEach(function(card){
+      if(card.reused){card.code=null;card.rank=null;card.suit=null;card.locked=false;}
+     });
      reset();
      result.forceNewHand=true;
      result.temporalConflict=false;
